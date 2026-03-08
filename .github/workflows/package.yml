@@ -146,11 +146,11 @@ jobs:
 
       - name: Build extension for ${{ matrix.browser }}
         working-directory: packages/extension
-        run: npx wxt build --browser ${{ matrix.wxt_browser }}
+        run: npx wxt build --browser ${{ matrix.wxt_browser }} --mv3
 
       - name: Zip extension for ${{ matrix.browser }}
         working-directory: packages/extension
-        run: npx wxt zip --browser ${{ matrix.wxt_browser }}
+        run: npx wxt zip --browser ${{ matrix.wxt_browser }} --mv3
 
       - name: Upload extension artifact
         uses: actions/upload-artifact@v4

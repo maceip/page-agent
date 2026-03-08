@@ -34,6 +34,8 @@ mkdirSync(outDir, { recursive: true })
 
 // --- 1. Bounce Loader Bookmarklet (recommended) ---
 // Loads the full bundle from a CDN/hosted URL. Works on all browsers.
+// NOTE: Sites with strict Content-Security-Policy (CSP) may block injected
+// script tags. In that case, users need the browser extension instead.
 const bounceLoader = `javascript:void(function(){if(window.pageAgent){window.pageAgent.dispose()}var s=document.createElement('script');s.src='${cdnUrl}';s.onerror=function(){alert('Failed to load page-agent. Check your network connection.')};document.head.appendChild(s)}())`
 
 // --- 2. Local Dev Bookmarklet ---
