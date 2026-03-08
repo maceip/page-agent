@@ -761,6 +761,51 @@ interface Memory {
 
 ---
 
+## Competitive Landscape & Prior Art
+
+### Existing Solutions
+
+| Project | Approach | Limitations for Page Agent |
+|---|---|---|
+| **[Mem0 OpenMemory Chrome Extension](https://github.com/mem0ai/mem0-chrome-extension)** | Content scripts injected into 8 AI platforms (ChatGPT, Claude, Gemini, etc.). Reads last messages, searches `api.mem0.ai` for relevant memories, injects them back into chat input. | **Cloud-dependent** — all memory goes through `api.mem0.ai`. No local-first option. No browser automation capability. Read-only observation, can't act. |
+| **[Mem0/OpenMemory MCP Server](https://mem0.ai/openmemory)** | Local MCP server exposing `add_memories`, `search_memory`, `list_memories`. Works with Cursor, VS Code, Claude Desktop, etc. 41K+ GitHub stars. | **Desktop-only** — runs as a local process, not in browser. No web-native story. No page observation or automation. |
+| **[@modelcontextprotocol/server-memory](https://github.com/modelcontextprotocol/servers/tree/main/src/memory)** | Official MCP memory server using knowledge graph (entities, relations, observations) in JSONL file. | **File-based, server-side** — not designed for browser context. No consolidation, no importance scoring, no cross-device sync. |
+| **[HARPA AI](https://harpa.ai/)** | Browser extension that monitors pages, runs 100+ automations, connects to ChatGPT/Claude/Gemini. | **Closed source**, proprietary. Different architecture — not an SDK/library. |
+| **[Fellou](https://fellou.ai/)** | "Agentic AI browser" with built-in memory that learns from browsing history. | **Separate browser** — not a library/extension. Vendor lock-in. |
+| **Claude in Chrome** | Anthropic's official extension (side panel, can see/click/type/navigate pages). | **Closed ecosystem** — only works with Claude. Not extensible as a memory layer for other agents. |
+
+### Page Agent's Differentiation
+
+1. **Local-first + web-native**: Memory stays in IndexedDB, no cloud calls. Works offline. No account needed.
+2. **Bidirectional**: Not just observation — the agent can act on memories (fill forms, click, navigate).
+3. **SDK-first**: Any developer can embed page-agent with memory into their web app via `customTools` and lifecycle hooks.
+4. **Agent-agnostic**: Clipboard bridge works with *any* AI tool. MCP bridge works with any MCP client. Not locked to one vendor.
+5. **Consolidation**: Inspired by Google's always-on-memory-agent — active memory processing, not just passive storage.
+
+### Standards Trajectory
+
+The [Agentic AI Foundation (AAIF)](https://en.wikipedia.org/wiki/Model_Context_Protocol), co-founded by Anthropic, Block, and OpenAI under the Linux Foundation, is expected to formalize agent memory as a first-class MCP primitive in 2026. Key signals:
+
+- MCP already has 97M+ monthly SDK downloads (as of early 2026)
+- [Google's A2A protocol](https://google.github.io/A2A/) complements MCP for agent-to-agent communication
+- Anthropic's [Agent Skills](https://docs.anthropic.com/en/docs/agents/agent-skills) standard addresses portable procedural knowledge
+- Academic work on ["Memory as a Service" (MaaS)](https://arxiv.org/html/2506.22815v1) frames contextual memory as service-oriented modules
+
+**Implication for page-agent**: Design the memory schema to be forward-compatible with MCP's expected memory primitives (entities, relations, observations). The `Memory` interface should be trivially mappable to MCP knowledge graph format.
+
+### Key Lesson from Mem0 Chrome Extension
+
+The Mem0 extension's architecture ([source](https://github.com/mem0ai/mem0-chrome-extension)) reveals the practical pattern for injecting memories into AI chat interfaces:
+
+1. **Per-platform content scripts** — each AI platform (ChatGPT, Claude, Gemini) needs its own DOM selectors
+2. **300ms debounced observation** — watch for new messages, avoid excessive API calls
+3. **Memory injection into chat input** — prepend relevant memories as system context before the user's message
+4. **Manual activation option** — Claude integration uses button/Ctrl+M rather than auto-inject (respects user control)
+
+Page-agent should adopt this pattern for Phase 3 (Page Observer) but with local-first storage instead of cloud API calls. The per-platform content scripts are the fragile part — but graceful degradation to clipboard bridge means this is additive, not critical path.
+
+---
+
 ## Security & Privacy
 
 1. **Memory is local-only** by default. No network calls for memory operations.
