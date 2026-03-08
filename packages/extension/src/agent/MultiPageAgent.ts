@@ -1,5 +1,7 @@
 import { type AgentConfig, PageAgentCore } from '@page-agent/core'
 
+import { captureStepMemory, captureTaskResult, withMemoryInstructions } from '@/lib/memory-agent'
+
 import { RemotePageController } from './RemotePageController'
 import { TabsController } from './TabsController'
 import SYSTEM_PROMPT from './system_prompt.md?raw'
@@ -43,13 +45,33 @@ export class MultiPageAgent extends PageAgentCore {
 		 */
 		let heartBeatInterval: null | number = null
 
+		// Wrap existing page instructions callback with memory injection
+		const existingPageInstructions = config.instructions?.getPageInstructions
+		const memoryAwareInstructions = withMemoryInstructions(existingPageInstructions)
+
+		/** Helper to get current tab URL for memory scoping */
+		const getCurrentUrl = async (): Promise<string> => {
+			try {
+				if (!tabsController.currentTabId) return '*'
+				const info = await tabsController.getTabInfo(tabsController.currentTabId)
+				return info.url || '*'
+			} catch {
+				return '*'
+			}
+		}
+
 		super({
 			...config,
 			pageController: pageController as any,
 			customTools: customTools,
 			customSystemPrompt: systemPrompt,
+			instructions: {
+				...config.instructions,
+				getPageInstructions: memoryAwareInstructions,
+			},
 
 			onBeforeTask: async (agent) => {
+				await config.onBeforeTask?.(agent)
 				await tabsController.init(agent.task, includeInitialTab)
 
 				heartBeatInterval = window.setInterval(() => {
@@ -63,7 +85,19 @@ export class MultiPageAgent extends PageAgentCore {
 				})
 			},
 
-			onAfterTask: async () => {
+			onAfterStep: async (agent, history) => {
+				await config.onAfterStep?.(agent, history)
+
+				// Auto-capture: persist the agent's reflection.memory from each step
+				const url = await getCurrentUrl()
+				await captureStepMemory(history, url, agent.taskId).catch((err) =>
+					console.warn('[Memory] Failed to capture step memory:', err)
+				)
+			},
+
+			onAfterTask: async (agent, result) => {
+				await config.onAfterTask?.(agent, result)
+
 				if (heartBeatInterval) {
 					window.clearInterval(heartBeatInterval)
 					heartBeatInterval = null
@@ -72,6 +106,12 @@ export class MultiPageAgent extends PageAgentCore {
 				await chrome.storage.local.set({
 					isAgentRunning: false,
 				})
+
+				// Auto-capture: persist the task result as a memory
+				const url = await getCurrentUrl()
+				await captureTaskResult(result, url, agent.taskId, agent.task).catch((err) =>
+					console.warn('[Memory] Failed to capture task result:', err)
+				)
 			},
 
 			onBeforeStep: async (agent) => {
