@@ -1,0 +1,395 @@
+name: Multi-Browser Packaging
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      browsers:
+        description: 'Browsers to build (comma-separated: chrome,firefox,edge,safari)'
+        required: false
+        default: 'chrome,firefox,edge,safari'
+      build_bookmarklet:
+        description: 'Build bookmarklet artifacts'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# ─────────────────────────────────────────────────────────────────────
+# Browser Extension Support Matrix
+# ─────────────────────────────────────────────────────────────────────
+# Browser        │ Desktop Extension │ Mobile Extension  │ Bookmarklet
+# ───────────────┼───────────────────┼───────────────────┼────────────
+# Chrome         │ MV3 (full)        │ N/A               │ Yes
+# Firefox        │ MV3 (adapted)     │ MV3 (limited)     │ Yes
+# Edge           │ MV3 (full)        │ N/A               │ Yes
+# Safari         │ MV3 (via Xcode)   │ MV3 (via Xcode)   │ Yes
+# ─────────────────────────────────────────────────────────────────────
+#
+# Key differences handled in this workflow:
+#
+# Chrome/Edge (Chromium):
+#   - Full MV3 support including sidePanel, tabGroups
+#   - Service worker background scripts
+#   - Identical build output (Edge uses Chrome extension format)
+#
+# Firefox:
+#   - MV3 with WebExtensions API (browser.* namespace, polyfilled by WXT)
+#   - No sidePanel API → extension needs sidebar_action fallback
+#   - No tabGroups API → tab grouping features gracefully degrade
+#   - Background scripts (not service workers) on Firefox MV3
+#   - Firefox for Android: limited extension support, no sidePanel
+#
+# Safari:
+#   - WXT builds the web extension bundle
+#   - Requires Xcode + safari-web-extension-converter for final .app/.xcodeproj
+#   - macOS and iOS share the same extension source
+#   - This CI generates the web extension ZIP; Xcode wrapping is a separate step
+#   - Safari supports MV3 but with some API differences (no tabGroups)
+#
+# Bookmarklet (all browsers, desktop + mobile):
+#   - IIFE bundle loaded via script injection
+#   - Works everywhere including mobile browsers without extension support
+#   - Three modes: CDN bounce, local dev, configurable (prompts for API key)
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════
+  # Build all library packages (shared dependency for extension builds)
+  # ═══════════════════════════════════════════════════════════════════
+  build-libs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build library packages
+        run: npm run build:libs
+
+      - name: Upload lib artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lib-dist
+          path: |
+            packages/core/dist/
+            packages/llms/dist/
+            packages/page-controller/dist/
+            packages/ui/dist/
+            packages/page-agent/dist/
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Browser Extension Builds (matrix strategy)
+  # ═══════════════════════════════════════════════════════════════════
+  build-extension:
+    needs: build-libs
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, firefox, edge, safari]
+        include:
+          # Chrome: Full MV3, sidePanel, tabGroups, service worker
+          - browser: chrome
+            wxt_browser: chrome
+            manifest_version: 3
+            notes: 'Full feature support'
+
+          # Firefox: MV3 with WebExtensions polyfill, no sidePanel/tabGroups
+          - browser: firefox
+            wxt_browser: firefox
+            manifest_version: 3
+            notes: 'No sidePanel, no tabGroups, background scripts (not SW)'
+
+          # Edge: Chromium-based, identical to Chrome build
+          - browser: edge
+            wxt_browser: edge
+            manifest_version: 3
+            notes: 'Chromium-based, same as Chrome'
+
+          # Safari: WXT builds web extension; Xcode wrapping separate
+          - browser: safari
+            wxt_browser: safari
+            manifest_version: 3
+            notes: 'Web extension bundle only; needs Xcode for final packaging'
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download lib artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: lib-dist
+          path: packages/
+
+      - name: Build extension for ${{ matrix.browser }}
+        working-directory: packages/extension
+        run: npx wxt build --browser ${{ matrix.wxt_browser }} --mv3
+
+      - name: Zip extension for ${{ matrix.browser }}
+        working-directory: packages/extension
+        run: npx wxt zip --browser ${{ matrix.wxt_browser }} --mv3
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-${{ matrix.browser }}
+          path: |
+            packages/extension/.output/*/
+            packages/extension/.output/*.zip
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Bookmarklet Build
+  # ═══════════════════════════════════════════════════════════════════
+  build-bookmarklet:
+    needs: build-libs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download lib artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: lib-dist
+          path: packages/
+
+      # Build the IIFE bundle (self-contained, all deps inlined)
+      - name: Build IIFE bundle
+        run: npm run build:demo --workspace=page-agent
+
+      - name: Generate bookmarklet artifacts
+        run: node scripts/build-bookmarklet.js --cdn-url "https://cdn.jsdelivr.net/npm/page-agent@${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}/dist/iife/page-agent.demo.js"
+
+      - name: Upload bookmarklet artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bookmarklet
+          path: dist/bookmarklet/
+          retention-days: 30
+
+      - name: Upload IIFE bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: iife-bundle
+          path: packages/page-agent/dist/iife/
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Compatibility Report
+  # ═══════════════════════════════════════════════════════════════════
+  compatibility-report:
+    needs: [build-extension, build-bookmarklet]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Generate compatibility report
+        run: |
+          echo "# Page Agent Browser Packaging Report" > report.md
+          echo "" >> report.md
+          echo "**Version:** ${GITHUB_REF#refs/tags/}" >> report.md
+          echo "**Built:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> report.md
+          echo "" >> report.md
+          echo "## Extension Packages" >> report.md
+          echo "" >> report.md
+          echo "| Browser | Platform | Package | API Notes |" >> report.md
+          echo "|---------|----------|---------|-----------|" >> report.md
+          echo "| Chrome | Desktop | \`extension-chrome.zip\` | Full MV3: sidePanel, tabGroups, service worker |" >> report.md
+          echo "| Chrome | Android | Bookmarklet only | No extension support on Chrome Android |" >> report.md
+          echo "| Firefox | Desktop | \`extension-firefox.zip\` | MV3: no sidePanel (use sidebar_action), no tabGroups |" >> report.md
+          echo "| Firefox | Android | \`extension-firefox.zip\` | Limited MV3 extension support |" >> report.md
+          echo "| Edge | Desktop | \`extension-edge.zip\` | Full MV3 (Chromium-based), identical to Chrome |" >> report.md
+          echo "| Edge | Android | Bookmarklet only | No extension support on Edge Android |" >> report.md
+          echo "| Safari | macOS | \`extension-safari.zip\` + Xcode | Requires safari-web-extension-converter |" >> report.md
+          echo "| Safari | iOS | \`extension-safari.zip\` + Xcode | Same source, iOS target in Xcode |" >> report.md
+          echo "" >> report.md
+          echo "## Bookmarklet" >> report.md
+          echo "" >> report.md
+          echo "| Variant | Description | All Browsers |" >> report.md
+          echo "|---------|-------------|--------------|" >> report.md
+          echo "| Bounce loader | Loads from CDN | Desktop + Mobile |" >> report.md
+          echo "| Configurable | Prompts for API config | Desktop + Mobile |" >> report.md
+          echo "| Local dev | Loads from localhost | Desktop only |" >> report.md
+          echo "" >> report.md
+          echo "## API Surface Differences" >> report.md
+          echo "" >> report.md
+          echo "| Feature | Chrome/Edge | Firefox | Safari |" >> report.md
+          echo "|---------|-------------|---------|--------|" >> report.md
+          echo "| Side Panel | \`chrome.sidePanel\` | \`browser.sidebarAction\` (fallback) | Not supported |" >> report.md
+          echo "| Tab Groups | \`chrome.tabGroups\` | Not available (graceful degrade) | Not available |" >> report.md
+          echo "| Background | Service Worker | Background script | Background script |" >> report.md
+          echo "| Built-in AI | \`LanguageModel\` API | Not available | Not available |" >> report.md
+          echo "| WebMCP Native | Chrome 146+ | postMessage fallback | postMessage fallback |" >> report.md
+          echo "| Isolated Worlds | \`world: 'MAIN'\` | \`wrappedJSObject\` / cloneInto | Supported (MV3) |" >> report.md
+          echo "" >> report.md
+          echo "## Artifact Sizes" >> report.md
+          echo "" >> report.md
+          for dir in artifacts/extension-*/; do
+            browser=$(basename "$dir" | sed 's/extension-//')
+            if ls "$dir"/*.zip 1>/dev/null 2>&1; then
+              size=$(du -sh "$dir"/*.zip | cut -f1)
+              echo "- **$browser**: $size" >> report.md
+            fi
+          done
+          if [ -d "artifacts/iife-bundle" ]; then
+            size=$(du -sh artifacts/iife-bundle/ | cut -f1)
+            echo "- **IIFE bundle**: $size" >> report.md
+          fi
+          echo "" >> report.md
+          cat report.md
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: compatibility-report
+          path: report.md
+          retention-days: 90
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Safari Xcode Project (macOS runner required)
+  # Converts the WXT-built web extension into a Safari App Extension
+  # for both macOS and iOS distribution.
+  # Only runs on tagged releases to save macOS runner minutes.
+  # ═══════════════════════════════════════════════════════════════════
+  safari-xcode-project:
+    needs: build-extension
+    runs-on: macos-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download Safari extension artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-safari
+          path: safari-ext/
+
+      - name: Find Safari extension output directory
+        id: find-ext
+        run: |
+          # WXT outputs to .output/<browser>-mv3/ directory
+          EXT_DIR=$(find safari-ext -type d -name "safari-mv3" | head -1)
+          if [ -z "$EXT_DIR" ]; then
+            # Fallback: look for any directory with manifest.json
+            EXT_DIR=$(find safari-ext -name "manifest.json" -exec dirname {} \; | head -1)
+          fi
+          echo "ext_dir=$EXT_DIR" >> "$GITHUB_OUTPUT"
+          echo "Found extension directory: $EXT_DIR"
+          ls -la "$EXT_DIR/" || true
+
+      - name: Convert to Safari Web Extension (Xcode project)
+        run: |
+          # safari-web-extension-converter generates an Xcode project
+          # that wraps the web extension for macOS and iOS
+          xcrun safari-web-extension-converter \
+            "${{ steps.find-ext.outputs.ext_dir }}" \
+            --project-location safari-xcode-project \
+            --app-name "Page Agent" \
+            --bundle-identifier "com.page-agent.safari-extension" \
+            --no-prompt \
+            --no-open \
+            --macos-only || true
+
+          # Also generate iOS variant
+          xcrun safari-web-extension-converter \
+            "${{ steps.find-ext.outputs.ext_dir }}" \
+            --project-location safari-xcode-project-ios \
+            --app-name "Page Agent" \
+            --bundle-identifier "com.page-agent.safari-extension" \
+            --no-prompt \
+            --no-open \
+            --ios-only || true
+
+      - name: Upload Safari Xcode projects
+        uses: actions/upload-artifact@v4
+        with:
+          name: safari-xcode-projects
+          path: |
+            safari-xcode-project/
+            safari-xcode-project-ios/
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Attach artifacts to GitHub Release (only on tags)
+  # ═══════════════════════════════════════════════════════════════════
+  attach-release:
+    needs: [build-extension, build-bookmarklet, safari-xcode-project]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+
+          # Extension ZIPs
+          for browser in chrome firefox edge safari; do
+            if ls artifacts/extension-${browser}/*.zip 1>/dev/null 2>&1; then
+              cp artifacts/extension-${browser}/*.zip release-assets/
+            fi
+          done
+
+          # IIFE bundle for self-hosting
+          if [ -d "artifacts/iife-bundle" ]; then
+            cd artifacts/iife-bundle && zip -r ../../release-assets/page-agent-iife-bundle.zip . && cd ../..
+          fi
+
+          # Bookmarklet installer
+          if [ -d "artifacts/bookmarklet" ]; then
+            cd artifacts/bookmarklet && zip -r ../../release-assets/page-agent-bookmarklet.zip . && cd ../..
+          fi
+
+          # Safari Xcode project
+          if [ -d "artifacts/safari-xcode-projects" ]; then
+            cd artifacts/safari-xcode-projects && zip -r ../../release-assets/page-agent-safari-xcode.zip . && cd ../..
+          fi
+
+          ls -la release-assets/
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          fail_on_unmatched_files: false

@@ -1,316 +1,157 @@
 #!/usr/bin/env node
+
 /**
- * Bookmarklet Builder
+ * Bookmarklet builder for page-agent
  *
- * Generates a bookmarklet that injects page-agent into any page.
- * Works on both mobile (via bookmark) and desktop browsers.
+ * Generates multiple bookmarklet deployment formats:
+ * 1. Inline bookmarklet - Self-contained (subject to URL length limits ~2KB)
+ * 2. Bounce loader - Loads the full IIFE bundle from a hosted URL
+ * 3. Local orchestrator - Loads from a local development server
  *
  * Usage:
- *   node scripts/build-bookmarklet.js [options]
- *
- * Options:
- *   --cdn-url <url>     CDN URL for the page-agent IIFE bundle
- *   --model <model>     LLM model name (default: qwen3.5-plus)
- *   --base-url <url>    LLM API base URL
- *   --api-key <key>     LLM API key
- *   --output <file>     Output file (default: dist/bookmarklet.html)
- *   --minify            Minify the bookmarklet code
+ *   node scripts/build-bookmarklet.js [--cdn-url <url>] [--local-port <port>]
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
-import { dirname, resolve } from 'path'
-import { fileURLToPath } from 'url'
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const rootDir = resolve(__dirname, '..')
+const ROOT = resolve(__dirname, '..')
 
-// Parse CLI args
 const args = process.argv.slice(2)
 function getArg(name) {
-	const idx = args.indexOf(name)
+	const idx = args.indexOf(`--${name}`)
 	return idx !== -1 && args[idx + 1] ? args[idx + 1] : null
 }
 
 const cdnUrl =
-	getArg('--cdn-url') ||
-	'https://unpkg.com/page-agent/dist/iife/page-agent.demo.js'
-const model = getArg('--model') || ''
-const baseURL = getArg('--base-url') || ''
-const apiKey = getArg('--api-key') || ''
-const outputFile = getArg('--output') || resolve(rootDir, 'dist', 'bookmarklet.html')
-const minify = args.includes('--minify')
+	getArg('cdn-url') ||
+	'https://cdn.jsdelivr.net/npm/page-agent@latest/dist/iife/page-agent.demo.js'
+const localPort = getArg('local-port') || '5174'
+const outDir = resolve(ROOT, 'dist', 'bookmarklet')
+mkdirSync(outDir, { recursive: true })
 
-/**
- * Generate the bookmarklet JavaScript code.
- *
- * The bookmarklet:
- * 1. Checks if page-agent is already loaded
- * 2. If loaded, disposes and reinjects (handles double-click)
- * 3. Dynamically creates a <script> tag to load the IIFE bundle
- * 4. Supports custom LLM configuration via URL parameters
- */
-function generateBookmarkletCode() {
-	// Build the script URL with optional parameters
-	let scriptUrl = cdnUrl
-	const params = []
-	if (model) params.push(`model=${encodeURIComponent(model)}`)
-	if (baseURL) params.push(`baseURL=${encodeURIComponent(baseURL)}`)
-	if (apiKey) params.push(`apiKey=${encodeURIComponent(apiKey)}`)
+// --- 1. Bounce Loader Bookmarklet (recommended) ---
+// Loads the full bundle from a CDN/hosted URL. Works on all browsers.
+// NOTE: Sites with strict Content-Security-Policy (CSP) may block injected
+// script tags. In that case, users need the browser extension instead.
+const bounceLoader = `javascript:void(function(){if(window.pageAgent){window.pageAgent.dispose()}var s=document.createElement('script');s.src='${cdnUrl}';s.onerror=function(){alert('Failed to load page-agent. Check your network connection.')};document.head.appendChild(s)}())`
 
-	if (params.length > 0) {
-		scriptUrl += (scriptUrl.includes('?') ? '&' : '?') + params.join('&')
+// --- 2. Local Dev Bookmarklet ---
+// Loads from a local dev server for testing
+const localLoader = `javascript:void(function(){if(window.pageAgent){window.pageAgent.dispose()}var s=document.createElement('script');s.src='http://localhost:${localPort}/page-agent.demo.js';s.onerror=function(){alert('Local page-agent server not running. Start with: npm run dev:demo')};document.head.appendChild(s)}())`
+
+// --- 3. Configurable Bounce Bookmarklet ---
+// Prompts user for LLM config on first run, stores in localStorage
+const configurableLoader = `javascript:void(function(){if(window.pageAgent){window.pageAgent.panel.show();return}var c=localStorage.getItem('pageAgentConfig');if(!c){var m=prompt('LLM Model name:','');if(!m)return;var b=prompt('LLM Base URL:','https://api.openai.com/v1');if(!b)return;var k=prompt('API Key:','');if(!k)return;c=JSON.stringify({model:m,baseURL:b,apiKey:k});localStorage.setItem('pageAgentConfig',c)}var cfg=JSON.parse(c);var s=document.createElement('script');s.src='${cdnUrl}'+'?model='+encodeURIComponent(cfg.model)+'&baseURL='+encodeURIComponent(cfg.baseURL)+'&apiKey='+encodeURIComponent(cfg.apiKey);s.onerror=function(){alert('Failed to load page-agent')};document.head.appendChild(s)}())`
+
+// --- 4. Try to build inline bookmarklet from IIFE if available ---
+let inlineBookmarklet = null
+try {
+	const iifePath = resolve(ROOT, 'packages', 'page-agent', 'dist', 'iife', 'page-agent.demo.js')
+	const iifeContent = readFileSync(iifePath, 'utf-8')
+
+	// Bookmarklets have practical URL limits (~2KB for older browsers, ~65KB for modern)
+	// Most page-agent builds will exceed even the generous limit
+	const encoded = `javascript:void(function(){${encodeURIComponent(iifeContent)}}())`
+	if (encoded.length <= 65536) {
+		inlineBookmarklet = encoded
+		console.log(`Inline bookmarklet: ${encoded.length} chars (within limits)`)
+	} else {
+		console.log(
+			`Inline bookmarklet too large: ${encoded.length} chars (limit: 65536). Use bounce loader instead.`
+		)
 	}
-
-	const code = `
-(function(){
-  if(window.pageAgent){
-    try{window.pageAgent.dispose()}catch(e){}
-    window.pageAgent=null;
-  }
-  var s=document.createElement('script');
-  s.src='${scriptUrl}';
-  s.onload=function(){console.log('page-agent loaded via bookmarklet')};
-  s.onerror=function(){alert('Failed to load page-agent. Check your connection.')};
-  document.head.appendChild(s);
-})();
-`.trim()
-
-	if (minify) {
-		return code.replace(/\s+/g, ' ').replace(/\s*([{}();,=+])\s*/g, '$1')
-	}
-	return code
+} catch {
+	console.log('IIFE build not found - skipping inline bookmarklet (build first with npm run build)')
 }
 
-/**
- * Generate the bookmarklet URI (javascript: protocol)
- */
-function generateBookmarkletURI() {
-	const code = generateBookmarkletCode()
-	return `javascript:${encodeURIComponent(code)}`
+// --- Generate output ---
+const output = {
+	bounce: bounceLoader,
+	local: localLoader,
+	configurable: configurableLoader,
+	inline: inlineBookmarklet,
+	metadata: {
+		cdnUrl,
+		localPort,
+		generatedAt: new Date().toISOString(),
+		browsers: {
+			chrome: { desktop: 'full', android: 'bookmarklet-only (no extension support)' },
+			firefox: { desktop: 'full', android: 'bookmarklet + extension (limited)' },
+			safari: { desktop: 'full', ios: 'bookmarklet via share sheet or extension' },
+			edge: { desktop: 'full', android: 'bookmarklet-only (no extension support)' },
+		},
+	},
 }
 
-/**
- * Generate an HTML page for easy bookmarklet installation.
- * Includes instructions for both desktop and mobile.
- */
-function generateInstallPage() {
-	const bookmarkletURI = generateBookmarkletURI()
-	const rawCode = generateBookmarkletCode()
+writeFileSync(resolve(outDir, 'bookmarklets.json'), JSON.stringify(output, null, 2))
 
-	return `<!DOCTYPE html>
+// Generate an HTML installer page
+const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Page Agent - Bookmarklet Installer</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 20px;
-    line-height: 1.6;
-    color: #333;
-  }
-  h1 { margin-bottom: 8px; font-size: 1.8em; }
-  h2 { margin-top: 24px; margin-bottom: 8px; font-size: 1.3em; color: #555; }
-  .subtitle { color: #666; margin-bottom: 24px; }
-  .bookmarklet-link {
-    display: inline-block;
-    background: #4F46E5;
-    color: white;
-    padding: 14px 28px;
-    border-radius: 8px;
-    text-decoration: none;
-    font-size: 18px;
-    font-weight: 600;
-    margin: 16px 0;
-    cursor: grab;
-    user-select: none;
-    -webkit-user-select: none;
-    touch-action: none;
-  }
-  .bookmarklet-link:hover { background: #4338CA; }
-  .bookmarklet-link:active { cursor: grabbing; }
-  .instructions {
-    background: #F9FAFB;
-    border: 1px solid #E5E7EB;
-    border-radius: 8px;
-    padding: 16px;
-    margin: 12px 0;
-  }
-  .instructions ol { padding-left: 20px; }
-  .instructions li { margin-bottom: 8px; }
-  code {
-    background: #F3F4F6;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 0.9em;
-  }
-  .code-block {
-    background: #1F2937;
-    color: #E5E7EB;
-    padding: 12px 16px;
-    border-radius: 8px;
-    overflow-x: auto;
-    font-size: 13px;
-    line-height: 1.5;
-    margin: 12px 0;
-    white-space: pre-wrap;
-    word-break: break-all;
-  }
-  .copy-btn {
-    background: #6B7280;
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    margin: 8px 0;
-  }
-  .copy-btn:hover { background: #4B5563; }
-  .tab-bar { display: flex; gap: 0; margin-top: 24px; }
-  .tab {
-    padding: 10px 20px;
-    background: #E5E7EB;
-    border: none;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-  }
-  .tab:first-child { border-radius: 8px 0 0 0; }
-  .tab:last-child { border-radius: 0 8px 0 0; }
-  .tab.active { background: #F9FAFB; font-weight: 600; }
-  .tab-content { display: none; }
-  .tab-content.active { display: block; }
-  .warning {
-    background: #FEF3C7;
-    border: 1px solid #F59E0B;
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin: 16px 0;
-    font-size: 14px;
-  }
+  body { font-family: system-ui, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.5rem; }
+  .bookmarklet-link { display: inline-block; padding: 0.75rem 1.5rem; background: #2563eb; color: white;
+    text-decoration: none; border-radius: 0.5rem; margin: 0.5rem 0; font-weight: bold; cursor: grab; }
+  .bookmarklet-link:hover { background: #1d4ed8; }
+  .instructions { background: #f3f4f6; padding: 1rem; border-radius: 0.5rem; margin: 1rem 0; }
+  code { background: #e5e7eb; padding: 0.15rem 0.4rem; border-radius: 0.25rem; font-size: 0.9em; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #e5e7eb; }
+  th { background: #f9fafb; }
+  .tag { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.8em; font-weight: bold; }
+  .tag-full { background: #dcfce7; color: #166534; }
+  .tag-partial { background: #fef9c3; color: #854d0e; }
+  .tag-bookmarklet { background: #dbeafe; color: #1e40af; }
 </style>
 </head>
 <body>
-
 <h1>Page Agent Bookmarklet</h1>
-<p class="subtitle">Add AI-powered automation to any webpage with one click.</p>
+<p>Drag any of the links below to your bookmarks bar to install.</p>
 
-<div class="warning">
-  <strong>Note:</strong> This bookmarklet loads page-agent from a CDN and runs it on the current page.
-  Only use on pages you trust.
+<h2>Recommended: Bounce Loader</h2>
+<p>Loads the latest version from CDN. Works on all browsers.</p>
+<a class="bookmarklet-link" href="${bounceLoader.replace(/"/g, '&quot;')}">Page Agent</a>
+
+<h2>Configurable Loader</h2>
+<p>Prompts for your LLM API configuration on first use (saved in localStorage).</p>
+<a class="bookmarklet-link" href="${configurableLoader.replace(/"/g, '&quot;')}">Page Agent (Config)</a>
+
+<h2>Local Dev</h2>
+<p>For development. Start the dev server first: <code>npm run dev:demo</code></p>
+<a class="bookmarklet-link" href="${localLoader.replace(/"/g, '&quot;')}">Page Agent (Local)</a>
+
+<div class="instructions">
+<h3>Mobile Installation</h3>
+<p><strong>iOS Safari:</strong> Create any bookmark, then edit it and replace the URL with the bookmarklet code.</p>
+<p><strong>Android Chrome/Firefox:</strong> Same approach - create a bookmark, edit it, paste the bookmarklet URL.</p>
+<p><strong>Tip:</strong> Copy the bookmarklet URL from the JSON output for mobile use.</p>
 </div>
 
-<h2>Install</h2>
+<h2>Browser Compatibility</h2>
+<table>
+<tr><th>Browser</th><th>Desktop</th><th>Mobile</th></tr>
+<tr><td>Chrome</td><td><span class="tag tag-full">Extension + Bookmarklet</span></td><td><span class="tag tag-bookmarklet">Bookmarklet only</span></td></tr>
+<tr><td>Firefox</td><td><span class="tag tag-full">Extension + Bookmarklet</span></td><td><span class="tag tag-partial">Extension (limited) + Bookmarklet</span></td></tr>
+<tr><td>Safari</td><td><span class="tag tag-full">Extension + Bookmarklet</span></td><td><span class="tag tag-partial">Extension (Xcode) + Bookmarklet</span></td></tr>
+<tr><td>Edge</td><td><span class="tag tag-full">Extension + Bookmarklet</span></td><td><span class="tag tag-bookmarklet">Bookmarklet only</span></td></tr>
+</table>
 
-<div class="tab-bar">
-  <button class="tab active" onclick="showTab('desktop')">Desktop</button>
-  <button class="tab" onclick="showTab('mobile')">Mobile (iOS/Android)</button>
-  <button class="tab" onclick="showTab('manual')">Manual</button>
-</div>
-
-<div id="tab-desktop" class="tab-content active">
-  <div class="instructions">
-    <ol>
-      <li><strong>Drag</strong> the button below to your bookmarks bar:</li>
-    </ol>
-    <p style="text-align:center;margin:20px 0;">
-      <a class="bookmarklet-link" href="${bookmarkletURI}" title="Page Agent"
-         onclick="event.preventDefault();alert('Drag this to your bookmarks bar!')">
-        Page Agent
-      </a>
-    </p>
-    <ol start="2">
-      <li>Navigate to any webpage</li>
-      <li>Click the <strong>"Page Agent"</strong> bookmark</li>
-      <li>The agent panel will appear - enter your task!</li>
-    </ol>
-  </div>
-</div>
-
-<div id="tab-mobile" class="tab-content">
-  <div class="instructions">
-    <h3 style="margin-bottom:8px;">iOS Safari</h3>
-    <ol>
-      <li>Bookmark this page (tap Share > Add Bookmark)</li>
-      <li>Edit the bookmark and <strong>replace the URL</strong> with the code below</li>
-      <li>Navigate to any page, then open your bookmarks and tap "Page Agent"</li>
-    </ol>
-    <h3 style="margin:16px 0 8px;">Android Chrome</h3>
-    <ol>
-      <li>Copy the code below</li>
-      <li>Create any bookmark, then edit it</li>
-      <li>Replace the URL with the copied code</li>
-      <li>Navigate to any page, type "Page Agent" in the address bar and tap the bookmark suggestion</li>
-    </ol>
-  </div>
-  <p style="margin-top:12px;"><strong>Bookmarklet code:</strong></p>
-  <div class="code-block" id="bookmarklet-code">${bookmarkletURI}</div>
-  <button class="copy-btn" onclick="copyCode()">Copy to Clipboard</button>
-</div>
-
-<div id="tab-manual" class="tab-content">
-  <div class="instructions">
-    <ol>
-      <li>Create a new bookmark in your browser</li>
-      <li>Set the name to <code>Page Agent</code></li>
-      <li>Paste the following as the URL:</li>
-    </ol>
-  </div>
-  <div class="code-block" id="manual-code">${bookmarkletURI}</div>
-  <button class="copy-btn" onclick="copyManualCode()">Copy to Clipboard</button>
-
-  <h3 style="margin-top:16px;">Or paste this in your browser console:</h3>
-  <div class="code-block">${rawCode.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-</div>
-
-<script>
-function showTab(name) {
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  event.target.classList.add('active');
-}
-function copyCode() {
-  navigator.clipboard.writeText(document.getElementById('bookmarklet-code').textContent)
-    .then(() => { event.target.textContent = 'Copied!'; setTimeout(() => event.target.textContent = 'Copy to Clipboard', 2000); });
-}
-function copyManualCode() {
-  navigator.clipboard.writeText(document.getElementById('manual-code').textContent)
-    .then(() => { event.target.textContent = 'Copied!'; setTimeout(() => event.target.textContent = 'Copy to Clipboard', 2000); });
-}
-</script>
+<p><small>Generated: ${new Date().toISOString()}</small></p>
 </body>
 </html>`
-}
 
-// Ensure output directory exists
-const outDir = dirname(outputFile)
-if (!existsSync(outDir)) {
-	mkdirSync(outDir, { recursive: true })
-}
+writeFileSync(resolve(outDir, 'index.html'), html)
 
-// Write outputs
-const html = generateInstallPage()
-writeFileSync(outputFile, html, 'utf-8')
-
-const bookmarkletURI = generateBookmarkletURI()
-const uriFile = outputFile.replace('.html', '.txt')
-writeFileSync(uriFile, bookmarkletURI, 'utf-8')
-
-console.log(`Bookmarklet installer: ${outputFile}`)
-console.log(`Bookmarklet URI:       ${uriFile}`)
-console.log(`URI length:            ${bookmarkletURI.length} chars`)
-
-// Warn if bookmarklet is too long for some mobile browsers
-if (bookmarkletURI.length > 2000) {
-	console.warn(
-		`\nWarning: Bookmarklet URI is ${bookmarkletURI.length} chars. ` +
-		`Some mobile browsers limit bookmarklets to ~2000 chars. ` +
-		`Consider using --minify or a shorter --cdn-url.`
-	)
-}
+console.log(`\nBookmarklet artifacts written to: ${outDir}/`)
+console.log(`  bookmarklets.json - Machine-readable bookmarklet URLs`)
+console.log(`  index.html        - Drag-and-drop installer page`)
+console.log(`\nBounce loader length: ${bounceLoader.length} chars`)
+console.log(`Configurable loader length: ${configurableLoader.length} chars`)
