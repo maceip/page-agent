@@ -1,5 +1,6 @@
 import { handlePageControlMessage } from '@/agent/RemotePageController.background'
 import { handleTabControlMessage, setupTabChangeEvents } from '@/agent/TabsController.background'
+import { initMemoryBackground } from '@/lib/memory-background'
 
 export default defineBackground(() => {
 	console.log('[Background] Service Worker started')
@@ -7,6 +8,10 @@ export default defineBackground(() => {
 	// tab change events
 
 	setupTabChangeEvents()
+
+	// memory durability hub — alarms, cross-device sync, persistence
+
+	initMemoryBackground()
 
 	// generate user auth token
 
@@ -17,17 +22,16 @@ export default defineBackground(() => {
 		chrome.storage.local.set({ PageAgentExtUserAuthToken: userAuthToken })
 	})
 
-	// message proxy
+	// message proxy — memory messages are handled by initMemoryBackground's own listener
 
 	chrome.runtime.onMessage.addListener((message, sender, sendResponse): true | undefined => {
 		if (message.type === 'TAB_CONTROL') {
 			return handleTabControlMessage(message, sender, sendResponse)
 		} else if (message.type === 'PAGE_CONTROL') {
 			return handlePageControlMessage(message, sender, sendResponse)
-		} else {
-			sendResponse({ error: 'Unknown message type' })
-			return
 		}
+		// Unknown or memory messages (handled by memory listener) — no response needed
+		return undefined
 	})
 
 	// setup

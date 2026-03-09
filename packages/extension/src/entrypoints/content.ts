@@ -1,4 +1,5 @@
 import { initPageController } from '@/agent/RemotePageController.content'
+import { initObservers } from '@/observers/observer-manager'
 
 // import { DEMO_CONFIG } from '@/agent/constants'
 
@@ -11,6 +12,10 @@ export default defineContentScript({
 	main() {
 		console.debug(`${DEBUG_PREFIX} Loaded on ${window.location.href}`)
 		initPageController()
+
+		// Start page observers for passive memory capture
+		// (only activates on matching AI platform URLs)
+		initObservers()
 
 		// if auth token matches, expose agent to page
 		chrome.storage.local.get('PageAgentExtUserAuthToken').then((result) => {
@@ -147,6 +152,53 @@ async function exposeAgentToPage() {
 
 			case 'stop': {
 				multiPageAgent?.stop()
+				break
+			}
+
+			// Memory API: let authenticated pages recall/save memories
+			case 'memory_recall': {
+				chrome.runtime.sendMessage(
+					{ type: 'MEMORY_RECALL', payload: payload || { scope: window.location.href, limit: 5 } },
+					(response) => {
+						window.postMessage(
+							{
+								channel: 'PAGE_AGENT_EXT_RESPONSE',
+								id,
+								action: 'memory_recall_result',
+								payload: response?.memories || [],
+							},
+							'*'
+						)
+					}
+				)
+				break
+			}
+
+			case 'memory_save': {
+				chrome.runtime.sendMessage(
+					{
+						type: 'MEMORY_WRITE',
+						payload: {
+							content: payload?.content || '',
+							tags: payload?.tags || [],
+							kind: payload?.kind || 'observation',
+							scope: payload?.scope || window.location.href,
+							source: { agent: payload?.agent || 'user', url: window.location.href },
+						},
+					},
+					(response) => {
+						window.postMessage(
+							{
+								channel: 'PAGE_AGENT_EXT_RESPONSE',
+								id,
+								action: 'memory_save_result',
+								payload: response?.ok ? response.memory : null,
+								error: response?.ok ? undefined : response?.error,
+							},
+							'*'
+						)
+					}
+				)
 				break
 			}
 

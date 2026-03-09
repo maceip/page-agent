@@ -1,4 +1,4 @@
-import { History, Send, Settings, Square } from 'lucide-react'
+import { Brain, History, Send, Settings, Square } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import { useAgent } from '../../agent/useAgent'
 import { ConfigPanel } from './components/ConfigPanel'
 import { HistoryDetail } from './components/HistoryDetail'
 import { HistoryList } from './components/HistoryList'
+import { MemoryPanel } from './components/MemoryPanel'
 import { ActivityCard, EventCard } from './components/cards'
 import { EmptyState, Logo, MotionOverlay, StatusDot } from './components/misc'
 
@@ -22,6 +23,7 @@ type View =
 	| { name: 'config' }
 	| { name: 'history' }
 	| { name: 'history-detail'; sessionId: string }
+	| { name: 'memory' }
 
 export default function App() {
 	const [view, setView] = useState<View>({ name: 'chat' })
@@ -111,6 +113,10 @@ export default function App() {
 		return <HistoryDetail sessionId={view.sessionId} onBack={() => setView({ name: 'history' })} />
 	}
 
+	if (view.name === 'memory') {
+		return <MemoryPanel onBack={() => setView({ name: 'chat' })} />
+	}
+
 	// --- Chat view ---
 
 	const isRunning = status === 'running'
@@ -127,6 +133,15 @@ export default function App() {
 				</div>
 				<div className="flex items-center gap-1">
 					<StatusDot status={status} />
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						onClick={() => setView({ name: 'memory' })}
+						className="cursor-pointer"
+						title="Memory"
+					>
+						<Brain className="size-3.5" />
+					</Button>
 					<Button
 						variant="ghost"
 						size="icon-sm"

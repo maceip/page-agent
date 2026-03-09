@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Page Agent Memory — E2E Test Harness</title>
+  <style>
+    body { font-family: monospace; padding: 16px; background: #111; color: #0f0; }
+    #log { white-space: pre-wrap; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h2>Page Agent Memory Test Harness</h2>
+  <div id="log"></div>
+
+  <!--
+    This page hosts the memory modules in a real browser context so Puppeteer
+    can exercise IndexedDB, BroadcastChannel, crypto.subtle, Web Locks,
+    navigator.storage, and the clipboard API against real browser implementations.
+
+    The test injects scripts via page.evaluate() — no bundler needed.
+  -->
+
+  <!-- Simulated AI chat UI targets for observer tests -->
+  <main id="chat-container">
+    <div data-testid="conversation">
+      <!-- Claude observer target -->
+    </div>
+    <div class="react-scroll-to-bottom--css-xxxxx">
+      <!-- ChatGPT observer target -->
+    </div>
+    <div class="conversation-container">
+      <!-- Gemini observer target -->
+    </div>
+  </main>
+
+  <script>
+    // Expose a simple log helper for tests
+    window.__TEST_LOG = [];
+    window.tlog = function(msg) {
+      window.__TEST_LOG.push(msg);
+      document.getElementById('log').textContent += msg + '\n';
+    };
+    tlog('Harness ready');
+  </script>
+</body>
+</html>
