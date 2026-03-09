@@ -1,7 +1,7 @@
 {
     "name": "root",
     "private": true,
-    "version": "1.5.2",
+    "version": "1.5.4",
     "type": "module",
     "workspaces": [
         "packages/page-controller",
@@ -24,19 +24,22 @@
         "node": "^20.19.0 || ^22.13.0 || >=24"
     },
     "scripts": {
-        "cleanup": "rm -rf packages/*/dist",
         "start": "npm run dev --workspace=@page-agent/website",
-        "build:website": "npm run build:website --workspace=@page-agent/website",
-        "build:libs": "npm run build --workspaces --if-present",
-        "build": "npm run build:libs && npm run build:website",
+        "dev:ext": "npm run dev -w @page-agent/ext",
         "dev:demo": "npm run dev:demo --workspace=page-agent",
+        "build": "npm run build:libs && npm run build:website",
+        "build:libs": "npm run build --workspaces --if-present",
+        "build:website": "npm run build:website --workspace=@page-agent/website",
+        "build:ext": "npm run build:libs && npm run zip -w @page-agent/ext",
         "version": "node scripts/sync-version.js",
         "test": "vitest run",
         "test:watch": "vitest",
         "test:secrets": "vitest run tests/secrets-scan.test.ts",
         "build:bookmarklet": "node scripts/build-bookmarklet.js",
-        "lint": "eslint .",
         "test:e2e": "node e2e/memory-system.test.mjs",
+        "version:ext": "node scripts/ext-version.js",
+        "lint": "eslint .",
+        "cleanup": "rm -rf packages/*/dist",
         "prepare": "husky"
     },
     "devDependencies": {
