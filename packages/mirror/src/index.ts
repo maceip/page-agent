@@ -3,11 +3,17 @@
 // ---------------------------------------------------------------------------
 //
 // Three-layer architecture for mirroring all browser state between a user's
-// local browser and a remote "shadow agent" operating a cloud browser:
+// local browser and a remote "shadow agent" operating a cloud browser.
 //
-//   Cold  → Chrome profile bootstrap (managed by native Rust launcher)
-//   Warm  → Identity / auth events / secrets / payment (event-driven)
-//   Hot   → Visual layer syncing (real-time stream)
+// Infrastructure:
+//   Tauri (Rust) shim as local window manager, holding two CDP strings
+//   QUIC as the multiplexed transport between local and cloud
+//   CDP (Chrome DevTools Protocol) for zero-dependency browser control
+//
+// Layers:
+//   Cold  → Tauri Ephemeral Bootstrapper + zstd profile payloads
+//   Warm  → CDP Event Bus + Identity Replicator + Navigation Proxy
+//   Hot   → MoQ Pipeline (AV1/QUIC) + WebCodecs + Invisible UI Projector
 //
 // The remote cloud browser is managed via the Cloud Agents API, ensuring each
 // user always has a fresh and live shadow agent.
@@ -15,20 +21,29 @@
 
 // -- Core types & config ----------------------------------------------------
 export type {
+	CdpConnectionConfig,
+	CdpCookiePayload,
+	CdpDomain,
 	ColdLayerConfig,
 	DiffFrame,
 	DiffPatch,
+	FetchInterceptPayload,
 	HotLayerConfig,
 	LayerSyncStatus,
-	MirrorConfig,
 	MirrorCloudAgentEvent,
+	MirrorConfig,
 	MirrorErrorEvent,
 	MirrorEvent,
 	MirrorLayerSyncEvent,
+	MirrorNavigationInterceptEvent,
 	MirrorSessionId,
 	MirrorSessionStatus,
 	MirrorState,
 	MirrorStatusChangeEvent,
+	MirrorVisualHandoffEvent,
+	QuicTransportConfig,
+	SpatialElement,
+	TauriWindowState,
 	VisualFrame,
 	WarmLayerConfig,
 } from './types'
@@ -40,6 +55,8 @@ export type {
 	LauncherCommand,
 	LauncherMessage,
 	ProfileDiffChunk,
+	ProfilePayload,
+	ProfilePayloadContents,
 	ProfileSnapshot,
 } from './layers/cold'
 
@@ -48,6 +65,7 @@ export type {
 	AuthEventCookieChange,
 	AuthEventLogin,
 	AuthEventLogout,
+	AuthEventNavigationIntercept,
 	AuthEventPaymentChange,
 	AuthEventStorageChange,
 	AuthEventTokenRefresh,
@@ -67,6 +85,7 @@ export type {
 	RemoteTouchEvent,
 	RemoteWheelEvent,
 	ScrollState,
+	VisualHandoffRequest,
 } from './layers/hot'
 
 // -- Cloud Agent API --------------------------------------------------------

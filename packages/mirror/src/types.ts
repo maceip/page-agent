@@ -31,6 +31,113 @@ export interface MirrorState {
 	lastFullSync: string | null
 	/** Remote cloud-agent id powering this session */
 	cloudAgentId: string | null
+	/** Local CDP endpoint (e.g. "ws://127.0.0.1:9222") */
+	localCdpEndpoint: string | null
+	/** Remote/cloud CDP endpoint relayed over QUIC */
+	remoteCdpEndpoint: string | null
+}
+
+// ---------------------------------------------------------------------------
+// Transport & connectivity
+// ---------------------------------------------------------------------------
+
+/**
+ * QUIC transport configuration.
+ *
+ * All inter-layer communication between the local Tauri shim and the cloud
+ * environment is multiplexed over QUIC.  Each layer opens one or more
+ * uni/bi-directional QUIC streams inside the same connection.
+ */
+export interface QuicTransportConfig {
+	/** Remote QUIC endpoint (e.g. "quic://cloud.example.com:4433") */
+	remoteEndpoint: string
+
+	/**
+	 * TLS certificate / CA bundle for the QUIC connection (PEM-encoded).
+	 * When undefined, the system root CAs are used.
+	 */
+	tlsCertificatePem?: string
+
+	/** Maximum concurrent bidirectional streams (default: 16) */
+	maxBidiStreams?: number
+
+	/** Maximum concurrent unidirectional streams (default: 32) */
+	maxUniStreams?: number
+
+	/** Keep-alive interval in ms (0 = disabled, default: 5000) */
+	keepAliveIntervalMs?: number
+
+	/** Connection idle timeout in ms (default: 30_000) */
+	idleTimeoutMs?: number
+
+	/**
+	 * QUIC congestion control algorithm hint.
+	 * The actual enforcement is in the Rust/QUIC implementation.
+	 */
+	congestionControl?: 'cubic' | 'bbr' | 'bbr2'
+}
+
+/**
+ * CDP (Chrome DevTools Protocol) connection descriptor.
+ *
+ * Both the local and remote browsers expose CDP over WebSocket on port 9222.
+ * The Tauri shim maintains two CDP strings – one for each side.
+ */
+export interface CdpConnectionConfig {
+	/** WebSocket debug URL (e.g. "ws://127.0.0.1:9222/devtools/browser/<id>") */
+	webSocketDebuggerUrl: string
+
+	/** The debugging port Chrome was launched with */
+	debuggingPort: number
+
+	/**
+	 * CDP domains to enable on this connection.
+	 * Each layer enables only the domains it needs.
+	 */
+	enabledDomains?: CdpDomain[]
+}
+
+/**
+ * CDP domains referenced across the three mirror layers.
+ */
+export type CdpDomain =
+	| 'Network'
+	| 'Storage'
+	| 'Fetch'
+	| 'Page'
+	| 'DOM'
+	| 'DOMSnapshot'
+	| 'Runtime'
+	| 'Input'
+	| 'Emulation'
+	| 'Target'
+	| 'Browser'
+	| 'Security'
+
+// ---------------------------------------------------------------------------
+// Tauri window manager
+// ---------------------------------------------------------------------------
+
+/**
+ * Tauri manages two browser "strings" (processes):
+ *   - local: the user's visible Chrome instance
+ *   - cloud: the headless Chrome in the remote environment
+ *
+ * The shim is responsible for:
+ *   - Spawning local Chrome with the right flags
+ *   - Establishing the QUIC tunnel to the cloud
+ *   - Overlaying the WebCodecs canvas for hot-layer handoffs
+ *   - Managing the invisible UI projector (transparent input elements)
+ */
+export interface TauriWindowState {
+	/** Whether the local Chrome window is currently visible to the user */
+	localVisible: boolean
+	/** Whether the hot-layer canvas overlay is active */
+	canvasOverlayActive: boolean
+	/** Whether transparent input elements are projected */
+	inputProjectionActive: boolean
+	/** Current overlay opacity (0 = fully transparent, 1 = opaque) */
+	overlayOpacity: number
 }
 
 // ---------------------------------------------------------------------------
@@ -42,6 +149,8 @@ export type MirrorEvent =
 	| MirrorLayerSyncEvent
 	| MirrorErrorEvent
 	| MirrorCloudAgentEvent
+	| MirrorNavigationInterceptEvent
+	| MirrorVisualHandoffEvent
 
 export interface MirrorStatusChangeEvent {
 	type: 'mirror:status-change'
@@ -59,7 +168,7 @@ export interface MirrorLayerSyncEvent {
 
 export interface MirrorErrorEvent {
 	type: 'mirror:error'
-	layer: 'cold' | 'warm' | 'hot' | 'controller'
+	layer: 'cold' | 'warm' | 'hot' | 'controller' | 'quic' | 'cdp'
 	message: string
 	cause?: unknown
 }
@@ -68,6 +177,33 @@ export interface MirrorCloudAgentEvent {
 	type: 'mirror:cloud-agent'
 	agentId: string
 	agentStatus: string
+}
+
+/**
+ * Emitted when the warm layer's navigation proxy intercepts a request.
+ * Consumers can use this to implement security policies (e.g. phishing detection).
+ */
+export interface MirrorNavigationInterceptEvent {
+	type: 'mirror:navigation-intercept'
+	/** The URL the user attempted to navigate to */
+	requestedUrl: string
+	/** CDP Fetch.requestPaused requestId – needed to continue or fulfill */
+	requestId: string
+	/** Whether the cloud's security analysis flagged this URL */
+	flagged: boolean
+	/** Reason for flagging (if any) */
+	flagReason?: string
+}
+
+/**
+ * Emitted during a visual handoff between local and cloud browsers.
+ * For example, during a cloud-passkey login flow.
+ */
+export interface MirrorVisualHandoffEvent {
+	type: 'mirror:visual-handoff'
+	direction: 'local-to-cloud' | 'cloud-to-local'
+	/** The trigger that initiated the handoff */
+	trigger: string
 }
 
 // ---------------------------------------------------------------------------
@@ -87,6 +223,9 @@ export interface MirrorConfig {
 	/** Git ref to use as the base for shadow environments */
 	ref?: string
 
+	/** QUIC transport configuration for the local ↔ cloud tunnel */
+	quic: QuicTransportConfig
+
 	/** Cold-layer configuration */
 	cold?: ColdLayerConfig
 
@@ -105,10 +244,24 @@ export interface MirrorConfig {
 
 export interface ColdLayerConfig {
 	/**
-	 * IPC address of the native Rust launcher process.
-	 * The launcher handles bi-directional Chrome profile sync.
+	 * IPC address of the Tauri ephemeral bootstrapper.
+	 * The bootstrapper handles zstd payload extraction and Chrome process spawning.
 	 */
-	launcherIpcAddress?: string
+	tauriIpcAddress?: string
+
+	/**
+	 * URL of the cloud profile packager endpoint that serves the compressed
+	 * baseline profile payload (.zstd, typically < 10 MB).
+	 */
+	profilePackagerUrl?: string
+
+	/**
+	 * Local directory for ephemeral profile extraction.
+	 * Tauri extracts the zstd payload here and spawns Chrome with
+	 * `--user-data-dir=<ephemeralDir>/cloud_session_<id>`.
+	 * Defaults to the OS temp directory.
+	 */
+	ephemeralDir?: string
 
 	/**
 	 * Absolute path to the local Chrome profile directory.
@@ -127,6 +280,18 @@ export interface ColdLayerConfig {
 	 * @default true
 	 */
 	bidirectional?: boolean
+
+	/**
+	 * Chrome remote debugging port for the locally-spawned instance.
+	 * @default 9222
+	 */
+	debuggingPort?: number
+
+	/**
+	 * Additional Chrome command-line flags to pass when spawning locally.
+	 * e.g. ["--disable-extensions", "--no-first-run"]
+	 */
+	chromeFlags?: string[]
 }
 
 export interface WarmLayerConfig {
@@ -153,12 +318,26 @@ export interface WarmLayerConfig {
 	 * @default false
 	 */
 	syncPaymentMethods?: boolean
+
+	/**
+	 * CDP domains to enable on the warm layer's event bus connections.
+	 * @default ['Network', 'Storage', 'Fetch', 'Page']
+	 */
+	cdpDomains?: CdpDomain[]
+
+	/**
+	 * Whether to enable the Navigation Proxy (CDP Fetch domain interception).
+	 * When enabled, local navigations are paused via Fetch.requestPaused,
+	 * mirrored to the cloud for security analysis, then continued or blocked.
+	 * @default true
+	 */
+	enableNavigationProxy?: boolean
 }
 
 export interface HotLayerConfig {
 	/**
-	 * Target frames-per-second for visual state streaming.
-	 * @default 5
+	 * Target frames-per-second for MoQ (Media over QUIC) visual streaming.
+	 * @default 30
 	 */
 	targetFps?: number
 
@@ -168,6 +347,13 @@ export interface HotLayerConfig {
 	 * @default 0
 	 */
 	maxBandwidthKbps?: number
+
+	/**
+	 * Video codec for MoQ streaming from the cloud's headless framebuffer.
+	 * AV1 is preferred for compression efficiency; H264 as a fallback.
+	 * @default 'av1'
+	 */
+	codec?: 'av1' | 'h264' | 'vp9'
 
 	/**
 	 * Whether to use differential frame encoding (send only changed regions).
@@ -180,6 +366,22 @@ export interface HotLayerConfig {
 	 * When unset, mirrors the local browser's current viewport.
 	 */
 	viewport?: { width: number; height: number }
+
+	/**
+	 * Whether to enable the Invisible UI Projector.
+	 * When active, Tauri renders transparent native HTML <input> elements
+	 * over the video <canvas> using the Micro-DOM spatial map, enabling
+	 * native OS cursors, password managers, and autofill to function.
+	 * @default true
+	 */
+	enableInvisibleUiProjector?: boolean
+
+	/**
+	 * Whether to use unreliable QUIC datagrams for MoQ frames.
+	 * Provides lower latency at the cost of potential frame drops.
+	 * @default true
+	 */
+	useUnreliableDatagrams?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -192,14 +394,19 @@ export interface VisualFrame {
 	seq: number
 	/** ISO-8601 capture timestamp */
 	timestamp: string
-	/** Frame format */
-	format: 'png' | 'jpeg' | 'webp'
-	/** Raw image data */
+	/** Frame format – 'av1' for MoQ-delivered encoded frames, image formats for snapshots */
+	format: 'av1' | 'h264' | 'vp9' | 'png' | 'jpeg' | 'webp'
+	/** Raw frame data (encoded video NAL units or image bytes) */
 	data: ArrayBuffer
 	/** Viewport dimensions when captured */
 	viewport: { width: number; height: number }
 	/** Browser state snapshot taken concurrently with the frame */
 	browserState?: BrowserState
+	/**
+	 * Spatial map extracted via CDP DOMSnapshot.captureSnapshot.
+	 * Used by the Invisible UI Projector to position transparent input elements.
+	 */
+	spatialMap?: SpatialElement[]
 }
 
 /** Differential frame – only the changed rectangular regions */
@@ -215,6 +422,93 @@ export interface DiffPatch {
 	y: number
 	width: number
 	height: number
-	format: 'png' | 'jpeg' | 'webp'
+	format: 'av1' | 'h264' | 'vp9' | 'png' | 'jpeg' | 'webp'
 	data: ArrayBuffer
+}
+
+// ---------------------------------------------------------------------------
+// Micro-DOM Spatial Map (extracted via CDP DOMSnapshot)
+// ---------------------------------------------------------------------------
+
+/**
+ * A single interactable element's spatial coordinates, extracted from
+ * DOMSnapshot.captureSnapshot on the cloud browser.
+ *
+ * Tauri uses this to render transparent HTML <input> elements at the
+ * correct positions over the video <canvas>, enabling native OS
+ * interactions (cursors, autofill, password managers).
+ */
+export interface SpatialElement {
+	/** CSS selector for the element in the remote DOM */
+	selector: string
+	/** Element type hint for the invisible projector */
+	inputType: 'text' | 'password' | 'email' | 'tel' | 'url' | 'search' | 'number' | 'button' | 'select' | 'checkbox' | 'radio' | 'other'
+	/** Bounding box in viewport coordinates */
+	bounds: {
+		x: number
+		y: number
+		width: number
+		height: number
+	}
+	/** Whether the element is currently visible in the viewport */
+	isVisible: boolean
+	/** Whether the element is focused in the remote browser */
+	isFocused: boolean
+	/** Placeholder text (if applicable) */
+	placeholder?: string
+	/** Autocomplete hint (e.g. "username", "current-password") */
+	autocomplete?: string
+	/** Node backend ID from CDP DOMSnapshot */
+	backendNodeId: number
+}
+
+// ---------------------------------------------------------------------------
+// CDP Event Bus payloads (used by warm layer's identity replicator)
+// ---------------------------------------------------------------------------
+
+/**
+ * A cookie payload as exchanged between the local and cloud CDP event buses.
+ * Mirrors the shape of CDP Network.Cookie with the fields needed for
+ * Network.setCookie injection.
+ */
+export interface CdpCookiePayload {
+	name: string
+	value: string
+	domain: string
+	path: string
+	expires: number
+	httpOnly: boolean
+	secure: boolean
+	sameSite: 'Strict' | 'Lax' | 'None'
+	/** ISO-8601 timestamp when this cookie was observed changing */
+	observedAt: string
+}
+
+/**
+ * Fetch domain interception payload.
+ * Represents a paused request captured via Fetch.requestPaused on the
+ * local browser by the warm layer's Navigation Proxy (the "Chaperone").
+ */
+export interface FetchInterceptPayload {
+	/** CDP Fetch.requestPaused event's requestId */
+	requestId: string
+	/** The URL of the intercepted request */
+	url: string
+	/** HTTP method */
+	method: string
+	/** Request headers */
+	headers: Record<string, string>
+	/** Resource type (Document, Script, etc.) */
+	resourceType: string
+	/**
+	 * The action to take after cloud security analysis:
+	 *   - 'continue': Fetch.continueRequest – let it through
+	 *   - 'fulfill': Fetch.fulfillRequest – inject a local response (e.g. interstitial)
+	 *   - 'fail': Fetch.failRequest – abort the request
+	 */
+	resolution?: 'continue' | 'fulfill' | 'fail'
+	/** If resolution is 'fulfill', the response body to inject */
+	fulfillBody?: string
+	/** If resolution is 'fulfill', the response status code */
+	fulfillStatusCode?: number
 }

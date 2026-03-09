@@ -5,27 +5,32 @@ import type {
 	HotLayerConfig,
 	LayerSyncStatus,
 	MirrorSessionId,
+	SpatialElement,
+	TauriWindowState,
 	VisualFrame,
 } from '../types'
 
 // ---------------------------------------------------------------------------
-// Hot Layer – Real-Time Visual State Sync
+// Hot Layer – MoQ Pipeline + Micro-DOM Spatial Extractor + Invisible UI Projector
 // ---------------------------------------------------------------------------
 //
-// The hot layer keeps the remote shadow browser's visual output synchronised
-// with the local browser in near-real-time.  This is the fastest-moving layer
-// and operates as a continuous stream.
+// The hot layer provides ultra-low latency pixel streaming and native OS
+// input spoofing when the cloud drives the viewport.
 //
-// Responsibilities:
-//   - Capture visual frames from the remote browser (screenshots / RFB stream)
-//   - Stream the local browser's DOM mutations & viewport changes to the remote
-//   - Provide a composited view the page-agent can reason over
-//   - Relay user input events (keyboard, mouse, touch) to the remote when
-//     the agent decides to act
+// Architecture:
+//   - **MoQ Pipeline**: The cloud captures its headless framebuffer,
+//     hardware-encodes to AV1, and streams via Media over QUIC (unreliable
+//     datagrams).  Tauri feeds these frames into a WebCodecs <canvas> that
+//     perfectly overlays the local Chrome window.
 //
-// The hot layer is the primary feedback loop: the page-agent observes the
-// remote browser through visual frames and BrowserState snapshots produced
-// here, then issues actions that are forwarded back to the remote.
+//   - **Micro-DOM Spatial Extractor**: The cloud fires native CDP
+//     DOMSnapshot.captureSnapshot to extract a spatial map — the exact
+//     (x, y, width, height) coordinates of interactable elements.
+//
+//   - **Invisible UI Projector**: Tauri receives the spatial map via QUIC
+//     and renders completely transparent native HTML <input> tags directly
+//     over the video <canvas>.  This tricks the local OS, native cursors,
+//     and password managers into functioning normally over a flat video stream.
 // ---------------------------------------------------------------------------
 
 /** A DOM mutation observed in the local browser to be replayed on the remote */
@@ -54,7 +59,7 @@ export interface ScrollState {
 	timestamp: string
 }
 
-/** Input event to forward to the remote browser */
+/** Input event to forward to the remote browser via CDP Input domain */
 export type RemoteInputEvent =
 	| RemoteMouseEvent
 	| RemoteKeyboardEvent
@@ -97,7 +102,7 @@ export interface RemoteWheelEvent {
 	timestamp: string
 }
 
-/** Quality / performance metrics for the visual stream */
+/** Quality / performance metrics for the MoQ visual stream */
 export interface HotLayerMetrics {
 	/** Actual frames per second being delivered */
 	currentFps: number
@@ -105,12 +110,45 @@ export interface HotLayerMetrics {
 	avgLatencyMs: number
 	/** Current bandwidth usage in kbps */
 	bandwidthKbps: number
-	/** Number of frames dropped due to bandwidth constraints */
+	/** Number of frames dropped (expected with unreliable datagrams) */
 	droppedFrames: number
 	/** Total frames delivered since session start */
 	totalFrames: number
 	/** Whether differential encoding is active */
 	differentialActive: boolean
+	/** Video codec currently in use */
+	activeCodec: 'av1' | 'h264' | 'vp9'
+	/** Whether the MoQ pipeline is using unreliable QUIC datagrams */
+	unreliableDatagrams: boolean
+	/** Number of spatial map updates received from the Micro-DOM extractor */
+	spatialMapUpdates: number
+	/** Number of invisible input elements currently projected */
+	projectedInputCount: number
+}
+
+/**
+ * Visual handoff control.
+ *
+ * During certain flows (e.g. cloud-passkey login), the hot layer
+ * performs a "visual handoff": Tauri brings the WebCodecs <canvas>
+ * to the front, obscuring the local browser.  The cloud browser
+ * operates visually, and when done, the canvas is destroyed and
+ * the local browser is revealed.
+ */
+export interface VisualHandoffRequest {
+	/** Reason for the handoff (for logging / UX) */
+	trigger: string
+	/**
+	 * Direction of the handoff:
+	 *   - 'local-to-cloud': Cloud takes over the viewport
+	 *   - 'cloud-to-local': Control returns to the local browser
+	 */
+	direction: 'local-to-cloud' | 'cloud-to-local'
+	/**
+	 * For 'cloud-to-local' handoffs, the CDP Page.loadEventFired event
+	 * URL that must fire before the canvas is destroyed.
+	 */
+	awaitLocalLoad?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -119,41 +157,57 @@ export interface HotLayerMetrics {
 
 /**
  * The hot layer provides real-time visual synchronisation between the local
- * and remote browsers.
+ * and remote browsers via:
+ *   - **MoQ Pipeline**: AV1-encoded frames over unreliable QUIC datagrams
+ *   - **WebCodecs <canvas>**: Hardware-decoded frames overlaid on the local window
+ *   - **Micro-DOM Spatial Extractor**: CDP DOMSnapshot.captureSnapshot spatial maps
+ *   - **Invisible UI Projector**: Transparent native <input> elements over canvas
  *
  * It is the page-agent's eyes and hands on the remote environment:
  *   - **Eyes**: Visual frames and BrowserState snapshots flow from remote → local.
  *   - **Hands**: Input events and DOM mutations flow from local → remote.
  *
  * Lifecycle:
- *   1. `initialize()` – Establish the streaming connection to the remote.
+ *   1. `initialize()` – Open MoQ stream, set up WebCodecs decoder, start spatial extractor.
  *   2. Subscribe to frames via `onFrame()`.
  *   3. Push local changes via `pushDomMutations()` / `pushScrollState()`.
- *   4. Forward agent actions via `sendInputEvent()`.
- *   5. `dispose()` – Tear down the stream.
+ *   4. Forward agent actions via `sendInputEvent()` (mapped to CDP Input domain).
+ *   5. Perform visual handoffs for cloud-driven flows.
+ *   6. `dispose()` – Tear down the MoQ stream, destroy canvas, remove projections.
  */
 export interface IHotLayer {
 	readonly status: LayerSyncStatus
 
 	/**
-	 * Establish the visual streaming connection to the remote shadow browser.
+	 * Establish the MoQ streaming pipeline:
+	 *   1. Open a QUIC connection with unreliable datagram support.
+	 *   2. Initialize the WebCodecs decoder for the configured codec (AV1/H264/VP9).
+	 *   3. Start the Micro-DOM spatial extractor on the cloud side.
+	 *   4. Optionally initialize the Invisible UI Projector.
 	 */
 	initialize(
 		sessionId: MirrorSessionId,
-		config: HotLayerConfig
+		config: HotLayerConfig,
+		remoteCdpUrl: string
 	): Promise<void>
 
 	// -- Remote → Local (observation) ----------------------------------------
 
 	/**
-	 * Subscribe to visual frames arriving from the remote browser.
+	 * Subscribe to visual frames arriving from the remote browser via MoQ.
 	 * Returns an unsubscribe function.
 	 */
 	onFrame(handler: (frame: VisualFrame | DiffFrame) => void): () => void
 
 	/**
+	 * Subscribe to spatial map updates from the Micro-DOM Spatial Extractor.
+	 * These are extracted via CDP DOMSnapshot.captureSnapshot on the cloud.
+	 */
+	onSpatialMapUpdate(handler: (elements: SpatialElement[]) => void): () => void
+
+	/**
 	 * Request the latest full (non-differential) frame on demand.
-	 * Useful when the agent needs a fresh baseline.
+	 * Forces a keyframe from the MoQ pipeline.
 	 */
 	captureFrame(): Promise<VisualFrame>
 
@@ -162,6 +216,11 @@ export interface IHotLayer {
 	 * This is the same structured state that PageController produces locally.
 	 */
 	getRemoteBrowserState(): Promise<BrowserState>
+
+	/**
+	 * Get the latest spatial map from the Micro-DOM extractor.
+	 */
+	getSpatialMap(): SpatialElement[]
 
 	// -- Local → Remote (action) --------------------------------------------
 
@@ -178,37 +237,68 @@ export interface IHotLayer {
 
 	/**
 	 * Forward an input event to the remote browser.
-	 * This is how the page-agent "acts" on the remote.
+	 * Internally maps to CDP Input.dispatchMouseEvent / Input.dispatchKeyEvent / etc.
 	 */
 	sendInputEvent(event: RemoteInputEvent): Promise<void>
+
+	// -- Visual Handoff (Tauri canvas overlay) --------------------------------
+
+	/**
+	 * Initiate a visual handoff between local and cloud browsers.
+	 *
+	 * 'local-to-cloud': Tauri brings the WebCodecs <canvas> to the front,
+	 * overlaying the local Chrome window with the cloud's pixel stream.
+	 *
+	 * 'cloud-to-local': Tauri waits for the local Chrome's Page.loadEventFired,
+	 * then destroys the canvas overlay, revealing the local browser.
+	 */
+	initiateHandoff(request: VisualHandoffRequest): Promise<void>
+
+	/**
+	 * Get the current Tauri window state (overlay, projection, etc.).
+	 */
+	getWindowState(): TauriWindowState
+
+	// -- Invisible UI Projector ----------------------------------------------
+
+	/**
+	 * Force a refresh of the projected transparent input elements.
+	 * Typically called after a spatial map update.
+	 */
+	refreshProjectedInputs(): Promise<void>
 
 	// -- Adaptive quality ---------------------------------------------------
 
 	/**
 	 * Dynamically adjust streaming parameters without reinitializing.
+	 * Can switch codecs, change FPS, toggle unreliable datagrams, etc.
 	 */
 	updateConfig(config: Partial<HotLayerConfig>): Promise<void>
 
 	/**
-	 * Get current performance metrics for the visual stream.
+	 * Get current performance metrics for the MoQ visual stream.
 	 */
 	getMetrics(): HotLayerMetrics
 
 	// -- Lifecycle ----------------------------------------------------------
 
 	/**
-	 * Pause the visual stream (e.g. when the tab is backgrounded).
-	 * Frames stop being delivered but the connection stays open.
+	 * Pause the MoQ stream (e.g. when the tab is backgrounded).
+	 * Frames stop being delivered but the QUIC connection stays open.
 	 */
 	pause(): void
 
 	/**
-	 * Resume a paused visual stream.
+	 * Resume a paused MoQ stream.
 	 */
 	resume(): void
 
 	/**
-	 * Tear down the streaming connection and release resources.
+	 * Tear down the hot layer:
+	 *   - Close the MoQ pipeline
+	 *   - Destroy the WebCodecs decoder
+	 *   - Remove the canvas overlay
+	 *   - Remove all projected input elements
 	 */
 	dispose(): Promise<void>
 }

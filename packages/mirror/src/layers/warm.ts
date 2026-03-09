@@ -1,20 +1,29 @@
-import type { LayerSyncStatus, MirrorSessionId, WarmLayerConfig } from '../types'
+import type { CdpCookiePayload, CdpDomain, FetchInterceptPayload, LayerSyncStatus, MirrorSessionId, WarmLayerConfig } from '../types'
 
 // ---------------------------------------------------------------------------
-// Warm Layer – Identity, Auth, Secrets & Payment Sync
+// Warm Layer – CDP Event Bus + Identity Replicator + Navigation Proxy
 // ---------------------------------------------------------------------------
 //
-// The warm layer keeps the remote shadow browser authenticated as the user.
-// It handles:
-//   - Cookies and session tokens
-//   - OAuth / OIDC tokens (access + refresh)
-//   - Service-worker registrations & push subscriptions
-//   - LocalStorage / SessionStorage / IndexedDB auth entries
-//   - Saved payment methods (when explicitly opted in)
+// The warm layer maintains real-time, bidirectional synchronisation of
+// session memory and network intent between the local and cloud browsers.
 //
-// Unlike the cold layer (which syncs static profile data), the warm layer
-// is event-driven: it reacts to auth-related changes in the local browser
-// and pushes them to the remote in near-real-time.
+// Architecture:
+//   - **Raw CDP Event Bus**: Lightweight daemons on both sides maintain
+//     standard WebSocket connections to their respective :9222 ports.
+//     They translate native browser events into JSON payloads sent over QUIC.
+//
+//   - **Identity Replicator**: Subscribes to the CDP Network and Storage
+//     domains.  When a cookie or token mutates on one side, it serialises the
+//     change as JSON over QUIC.  The receiving side injects it into active
+//     memory using Network.setCookie / Storage.setStorageItem.
+//
+//   - **Navigation Proxy ("The Chaperone")**: Uses the CDP Fetch domain
+//     (Fetch.enable + Fetch.requestPaused) on the local browser.  It
+//     intercepts local network requests before they leave the machine,
+//     mirrors them to the cloud for security analysis, then decides:
+//       - Fetch.continueRequest – let it through
+//       - Fetch.fulfillRequest – inject a local response (e.g. phishing interstitial)
+//       - Fetch.failRequest – abort entirely
 // ---------------------------------------------------------------------------
 
 /** Classification of credential types handled by the warm layer */
@@ -46,9 +55,18 @@ export interface CredentialEntry {
 	observedAt: string
 	/** ISO-8601 expiry (if known – e.g. cookie Expires, token exp claim) */
 	expiresAt?: string
+	/**
+	 * Raw CDP cookie data (populated when kind === 'cookie').
+	 * Used for direct injection via Network.setCookie.
+	 */
+	cdpCookie?: CdpCookiePayload
 }
 
-/** Auth event detected in the local browser */
+// ---------------------------------------------------------------------------
+// Auth events detected via CDP domain subscriptions
+// ---------------------------------------------------------------------------
+
+/** Auth event detected in the local browser via CDP */
 export type AuthEvent =
 	| AuthEventLogin
 	| AuthEventLogout
@@ -56,11 +74,14 @@ export type AuthEvent =
 	| AuthEventCookieChange
 	| AuthEventStorageChange
 	| AuthEventPaymentChange
+	| AuthEventNavigationIntercept
 
 export interface AuthEventLogin {
 	type: 'login'
 	origin: string
 	credentials: CredentialEntry[]
+	/** CDP domain that detected the login (typically 'Network') */
+	detectedVia: CdpDomain
 	timestamp: string
 }
 
@@ -85,6 +106,8 @@ export interface AuthEventCookieChange {
 	origin: string
 	added: CredentialEntry[]
 	removed: string[]
+	/** Raw CDP cookie payloads ready for Network.setCookie injection */
+	cdpCookies: CdpCookiePayload[]
 	timestamp: string
 }
 
@@ -104,6 +127,17 @@ export interface AuthEventPaymentChange {
 	timestamp: string
 }
 
+/**
+ * Emitted when the Navigation Proxy (Chaperone) intercepts a request
+ * via CDP Fetch.requestPaused.  This allows the cloud to perform
+ * security analysis before the local browser connects to the destination.
+ */
+export interface AuthEventNavigationIntercept {
+	type: 'navigation-intercept'
+	intercept: FetchInterceptPayload
+	timestamp: string
+}
+
 /** Summary of what's currently synced to the remote */
 export interface WarmLayerSnapshot {
 	/** Total number of credentials being tracked */
@@ -116,6 +150,10 @@ export interface WarmLayerSnapshot {
 	expiringSoon: Array<{ id: string; origin: string; expiresAt: string }>
 	/** ISO-8601 timestamp of the last push to the remote */
 	lastPushedAt: string | null
+	/** CDP domains currently subscribed to on local side */
+	activeCdpDomains: CdpDomain[]
+	/** Whether the Navigation Proxy is active */
+	navigationProxyActive: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -123,35 +161,54 @@ export interface WarmLayerSnapshot {
 // ---------------------------------------------------------------------------
 
 /**
- * The warm layer ensures the remote shadow browser stays authenticated
- * with the user's current identity and secrets.
+ * The warm layer keeps the remote shadow browser authenticated by
+ * maintaining a CDP Event Bus on both sides (local + cloud), connected
+ * via QUIC streams.
+ *
+ * Components:
+ *   - **Identity Replicator**: CDP Network/Storage domain subscriptions
+ *     detect cookie/token mutations and replicate them via Network.setCookie.
+ *   - **Navigation Proxy**: CDP Fetch domain intercepts local requests,
+ *     mirrors them to the cloud for security analysis, then continues,
+ *     fulfills (e.g. with a phishing interstitial), or fails them.
  *
  * Lifecycle:
- *   1. `initialize()` – Start observing auth events in the local browser.
+ *   1. `initialize()` – Open CDP WebSocket to local :9222, enable domains,
+ *      establish QUIC stream to cloud-side CDP relay.
  *   2. Auth events auto-push to the remote as they occur.
- *   3. `forceSync()` – Manually trigger a full credential push.
- *   4. `dispose()` – Stop observation and clean up.
+ *   3. Navigation requests are intercepted and proxied to the cloud.
+ *   4. `dispose()` – Disable Fetch interception, close CDP connections.
  */
 export interface IWarmLayer {
 	readonly status: LayerSyncStatus
 
 	/**
-	 * Begin observing auth-related events in the local browser and syncing
-	 * them to the remote environment.
+	 * Begin observing auth-related events via CDP on the local browser
+	 * and syncing them to the remote environment over QUIC.
+	 *
+	 * Internally:
+	 *   1. Opens a WebSocket to the local Chrome's :9222 debug endpoint.
+	 *   2. Enables CDP domains: Network, Storage, and optionally Fetch.
+	 *   3. Establishes a QUIC bidirectional stream to the cloud-side CDP relay.
+	 *   4. Starts the Identity Replicator and Navigation Proxy.
 	 */
 	initialize(
 		sessionId: MirrorSessionId,
-		config: WarmLayerConfig
+		config: WarmLayerConfig,
+		localCdpUrl: string,
+		remoteCdpUrl: string
 	): Promise<WarmLayerSnapshot>
 
 	/**
 	 * Register a callback to be notified of auth events as they occur.
+	 * Includes navigation intercepts from the Chaperone.
 	 */
 	onAuthEvent(handler: (event: AuthEvent) => void): () => void
 
 	/**
 	 * Force a full credential sync to the remote, regardless of change detection.
-	 * Useful after cold-layer bootstrap to ensure the new remote env is primed.
+	 * Internally enumerates all cookies via Network.getAllCookies on the local
+	 * browser and pushes them via Network.setCookie on the remote.
 	 */
 	forceSync(): Promise<WarmLayerSnapshot>
 
@@ -165,22 +222,41 @@ export interface IWarmLayer {
 
 	/**
 	 * Manually inject a credential into the sync pipeline.
-	 * Useful for programmatic auth flows (e.g. API-key login, headless auth).
+	 * For cookies, this calls Network.setCookie on the remote via CDP.
 	 */
 	injectCredential(entry: CredentialEntry): Promise<void>
 
 	/**
 	 * Revoke / remove a credential from both local tracking and the remote.
+	 * For cookies, calls Network.deleteCookies on both sides.
 	 */
 	revokeCredential(id: string): Promise<void>
 
 	/**
-	 * Get the current snapshot without triggering a sync.
+	 * Resolve a navigation intercept.
+	 * This is how consumers respond to the Chaperone's Fetch.requestPaused event.
+	 *
+	 * @param requestId - The CDP requestId from the intercept event
+	 * @param resolution - continue, fulfill (with custom body), or fail
 	 */
+	resolveNavigationIntercept(
+		requestId: string,
+		resolution: FetchInterceptPayload['resolution'],
+		fulfillOptions?: {
+			body: string
+			statusCode?: number
+			headers?: Record<string, string>
+		}
+	): Promise<void>
+
+	/** Get the current snapshot without triggering a sync. */
 	getSnapshot(): WarmLayerSnapshot | null
 
 	/**
-	 * Tear down observers and release resources.
+	 * Tear down the warm layer:
+	 *   - Disable Fetch interception (Fetch.disable)
+	 *   - Close CDP WebSocket connections
+	 *   - Close QUIC streams
 	 */
 	dispose(): Promise<void>
 }
