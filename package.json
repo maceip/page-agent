@@ -39,6 +39,8 @@
         "test:e2e": "node e2e/memory-system.test.mjs",
         "version:ext": "node scripts/ext-version.js",
         "lint": "eslint .",
+        "check": "npm run lint && npx prettier --check '**/*.ts' && npx tsc --build --noEmit && npm test && npm run build",
+        "setup": "bash scripts/setup.sh",
         "cleanup": "rm -rf packages/*/dist",
         "prepare": "husky"
     },

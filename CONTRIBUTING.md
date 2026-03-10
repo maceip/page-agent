@@ -11,12 +11,22 @@ Thank you for your interest in contributing to PageAgent! We welcome contributio
     - An editor that supports `ts/eslint/prettier`
     - Make sure `eslint`, `prettier` and `commitlint` work well
 
-2. **Setup**
+2. **Setup** (one command)
 
     ```bash
-    npm ci
+    npm run setup      # Installs deps, builds libs, creates .env
+    ```
+
+    Then start developing:
+
+    ```bash
     npm start          # Start demo and documentation site
-    npm run build      # Build libs and website
+    ```
+
+    To run the full CI check locally before pushing:
+
+    ```bash
+    npm run check      # Lint + format + typecheck + test + build
     ```
 
 ### Project Structure
