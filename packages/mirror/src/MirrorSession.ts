@@ -33,6 +33,15 @@ function isSnapshot(update: MicroDOMSnapshot | MicroDOMDiff): update is MicroDOM
 	return 'elements' in update && 'simplifiedHTML' in update
 }
 
+/** Escape a string for safe inclusion inside an HTML attribute value (double-quoted). */
+function escapeAttr(value: string): string {
+	return value
+		.replace(/&/g, '&amp;')
+		.replace(/"/g, '&quot;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+}
+
 // ---------------------------------------------------------------------------
 // MirrorSession
 // ---------------------------------------------------------------------------
@@ -44,6 +53,7 @@ export class MirrorSession {
 	private unsubSpatial: (() => void) | null = null
 	private currentSnapshot: MicroDOMSnapshot | null = null
 	private started = false
+	private disposed = false
 
 	constructor(hotLayer: IHotLayer) {
 		this.hotLayer = hotLayer
@@ -67,8 +77,12 @@ export class MirrorSession {
 			this.controller.applySnapshot(existing)
 		}
 
-		// Subscribe to future updates
+		// Subscribe to future updates.
+		// Guard against callbacks firing after dispose() — the hot layer may
+		// enqueue a callback between unsubscribe and delivery completion.
 		this.unsubSpatial = this.hotLayer.onSpatialMapUpdate((update) => {
+			if (this.disposed) return
+
 			if (isSnapshot(update)) {
 				this.currentSnapshot = update
 				this.controller.applySnapshot(update)
@@ -98,6 +112,9 @@ export class MirrorSession {
 	 * Tear down: unsubscribe from spatial updates and dispose the controller.
 	 */
 	dispose(): void {
+		// Set disposed flag FIRST so in-flight callbacks become no-ops
+		this.disposed = true
+
 		if (this.unsubSpatial) {
 			this.unsubSpatial()
 			this.unsubSpatial = null
@@ -115,9 +132,18 @@ export class MirrorSession {
 	 * Apply a MicroDOMDiff to the current snapshot, producing a new full snapshot.
 	 *
 	 * If there's no prior snapshot, the diff's upserted elements become the
-	 * full element list (best-effort recovery).
+	 * full element list (best-effort recovery), but url/title/dpr may be
+	 * incomplete — a warning is logged to make this visible.
 	 */
 	private applyDiff(base: MicroDOMSnapshot | null, diff: MicroDOMDiff): MicroDOMSnapshot {
+		if (!base) {
+			console.warn(
+				'[MirrorSession] Applying diff without a base snapshot — url/title/dpr ' +
+					'may be incorrect. This typically means the first message from the hot ' +
+					'layer was a diff, not a full snapshot.'
+			)
+		}
+
 		// Start from existing elements or empty
 		const elementMap = new Map<number, SpatialElement>()
 		if (base) {
@@ -138,15 +164,16 @@ export class MirrorSession {
 
 		const elements = [...elementMap.values()]
 
-		// Regenerate simplifiedHTML from elements
+		// Regenerate simplifiedHTML from elements (attributes are escaped to
+		// prevent malformed HTML from confusing the LLM's element index parsing).
 		const simplifiedHTML = elements
 			.map((el) => {
 				const attrs: string[] = []
-				if (el.inputType) attrs.push(`type="${el.inputType}"`)
-				if (el.placeholder) attrs.push(`placeholder="${el.placeholder}"`)
-				if (el.label) attrs.push(`aria-label="${el.label}"`)
-				if (el.autocomplete) attrs.push(`autocomplete="${el.autocomplete}"`)
-				if (el.href) attrs.push(`href="${el.href}"`)
+				if (el.inputType) attrs.push(`type="${escapeAttr(el.inputType)}"`)
+				if (el.placeholder) attrs.push(`placeholder="${escapeAttr(el.placeholder)}"`)
+				if (el.label) attrs.push(`aria-label="${escapeAttr(el.label)}"`)
+				if (el.autocomplete) attrs.push(`autocomplete="${escapeAttr(el.autocomplete)}"`)
+				if (el.href) attrs.push(`href="${escapeAttr(el.href)}"`)
 
 				const attrStr = attrs.length ? ` ${attrs.join(' ')}` : ''
 
@@ -163,9 +190,9 @@ export class MirrorSession {
 			ts: diff.ts,
 			viewport: diff.viewport ?? base?.viewport ?? { w: 1920, h: 1080 },
 			scroll: diff.scroll ?? base?.scroll ?? { x: 0, y: 0 },
-			dpr: base?.dpr ?? 1,
-			url: base?.url ?? '',
-			title: base?.title ?? '',
+			dpr: diff.dpr ?? base?.dpr ?? 1,
+			url: diff.url ?? base?.url ?? '',
+			title: diff.title ?? base?.title ?? '',
 			elements,
 			simplifiedHTML,
 		}

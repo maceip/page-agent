@@ -427,7 +427,14 @@ export class PageAgentCore extends EventTarget {
 				console.log(chalk.blue.bold('MacroTool input'), input)
 				const action = input.action
 
-				const toolName = Object.keys(action)[0]
+				const actionKeys = Object.keys(action)
+				if (actionKeys.length !== 1) {
+					throw new Error(
+						`Expected exactly one action, got ${actionKeys.length}: [${actionKeys.join(', ')}]. ` +
+							'The LLM must return a single action per step.'
+					)
+				}
+				const toolName = actionKeys[0]
 				const toolInput = action[toolName]
 
 				// Build reflection text, only include non-empty fields
@@ -509,22 +516,27 @@ export class PageAgentCore extends EventTarget {
 		const { instructions, experimentalLlmsTxt } = this.config
 
 		const systemInstructions = instructions?.system?.trim()
-		let pageInstructions: string | undefined
-
 		const url = this.#states.browserState?.url || ''
-		if (instructions?.getPageInstructions && url) {
-			try {
-				const raw = await instructions.getPageInstructions(url)
-				pageInstructions = raw?.trim()
-			} catch (error) {
-				console.error(
-					chalk.red('[PageAgent] Failed to execute getPageInstructions callback:'),
-					error
-				)
-			}
-		}
 
-		const llmsTxt = experimentalLlmsTxt && url ? await fetchLlmsTxt(url) : undefined
+		// Fetch page-specific instructions and llms.txt in parallel — they
+		// are independent I/O operations that should not block each other.
+		const pageInstructionsPromise =
+			instructions?.getPageInstructions && url
+				? Promise.resolve(instructions.getPageInstructions(url))
+						.then((raw: string | null | undefined) => raw?.trim())
+						.catch((error: unknown) => {
+							console.error(
+								chalk.red('[PageAgent] Failed to execute getPageInstructions callback:'),
+								error
+							)
+							return undefined
+						})
+				: Promise.resolve(undefined)
+
+		const llmsTxtPromise =
+			experimentalLlmsTxt && url ? fetchLlmsTxt(url) : Promise.resolve(undefined)
+
+		const [pageInstructions, llmsTxt] = await Promise.all([pageInstructionsPromise, llmsTxtPromise])
 
 		if (!systemInstructions && !pageInstructions && !llmsTxt) return ''
 
@@ -592,7 +604,13 @@ export class PageAgentCore extends EventTarget {
 	}
 
 	async #assembleUserPrompt(): Promise<string> {
-		const browserState = this.#states.browserState!
+		const browserState: BrowserState = this.#states.browserState ?? {
+			url: '',
+			title: '',
+			header: '[Page unavailable]',
+			content: '<EMPTY>',
+			footer: '[End of page]',
+		}
 
 		let prompt = ''
 

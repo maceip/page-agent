@@ -552,6 +552,12 @@ export interface MicroDOMDiff {
 	viewport?: { w: number; h: number }
 	/** Updated scroll if changed */
 	scroll?: { x: number; y: number }
+	/** Updated page URL (included when the URL changed since last snapshot) */
+	url?: string
+	/** Updated page title (included when the title changed since last snapshot) */
+	title?: string
+	/** Updated device pixel ratio (included when it changed, e.g. display switch) */
+	dpr?: number
 	/** Elements added or updated (full element data) */
 	upserted: SpatialElement[]
 	/** Element IDs removed */

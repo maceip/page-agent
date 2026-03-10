@@ -24,10 +24,14 @@ import type { MicroDOMSnapshot, SpatialElement } from './types'
 // RemotePageController
 // ---------------------------------------------------------------------------
 
+/** Default timeout (ms) when waiting for the hot layer to push a fresh snapshot */
+const SNAPSHOT_TIMEOUT_MS = 2_000
+
 export class RemotePageController extends EventTarget implements IPageController {
 	private hotLayer: IHotLayer
 	private snapshot: MicroDOMSnapshot | null = null
 	private lastUpdateTime = 0
+	private disposed = false
 
 	/** Map from stable element ID → SpatialElement (rebuilt on each snapshot) */
 	private elementMap = new Map<number, SpatialElement>()
@@ -117,20 +121,64 @@ export class RemotePageController extends EventTarget implements IPageController
 
 	// ======= DOM Tree Operations =======
 
+	/**
+	 * Refresh the spatial map from the hot layer.
+	 *
+	 * Strategy:
+	 *  1. Always check the hot layer for a newer snapshot than what we hold.
+	 *  2. If nothing newer is available, subscribe to the next
+	 *     `onSpatialMapUpdate` push with a short timeout so the agent loop
+	 *     never blocks indefinitely on a slow QUIC link.
+	 *  3. If the timeout fires, return whatever we have (stale-but-present
+	 *     beats hanging the agent loop).
+	 */
 	async updateTree(): Promise<string> {
 		this.dispatchEvent(new Event('beforeUpdate'))
 
-		// The snapshot is pushed to us — we don't poll.
-		// If the orchestrator hasn't fed us a snapshot yet, try to get one.
+		// Always check the hot layer — it may have received a push since our
+		// last applySnapshot() call.
+		const latestSnap = this.hotLayer.getLatestSnapshot()
+		if (latestSnap && latestSnap.seq !== this.snapshot?.seq) {
+			this.applySnapshot(latestSnap)
+		}
+
+		// If we still have no snapshot at all, await the next push with a timeout.
 		if (!this.snapshot) {
-			const latestSnap = this.hotLayer.getLatestSnapshot()
-			if (latestSnap) {
-				this.applySnapshot(latestSnap)
-			}
+			await this.awaitNextSnapshot()
 		}
 
 		this.dispatchEvent(new Event('afterUpdate'))
 		return this.snapshot?.simplifiedHTML ?? '<EMPTY>'
+	}
+
+	/**
+	 * One-shot wait for the next spatial-map update from the hot layer.
+	 * Resolves as soon as a snapshot (or diff) arrives, or after
+	 * `SNAPSHOT_TIMEOUT_MS` — whichever comes first.
+	 */
+	private awaitNextSnapshot(): Promise<void> {
+		return new Promise<void>((resolve) => {
+			let settled = false
+			const unsub = this.hotLayer.onSpatialMapUpdate((update) => {
+				if (settled) return
+				settled = true
+				unsub()
+				clearTimeout(timer)
+				// The MirrorSession normally feeds snapshots to us, but if
+				// RemotePageController is used standalone, apply directly.
+				if ('elements' in update && 'simplifiedHTML' in update) {
+					this.applySnapshot(update as MicroDOMSnapshot)
+				}
+				resolve()
+			})
+
+			const timer = setTimeout(() => {
+				if (settled) return
+				settled = true
+				unsub()
+				resolve()
+			}, SNAPSHOT_TIMEOUT_MS)
+		})
 	}
 
 	async cleanUpHighlights(): Promise<void> {
@@ -298,6 +346,7 @@ export class RemotePageController extends EventTarget implements IPageController
 	}
 
 	dispose(): void {
+		this.disposed = true
 		this.snapshot = null
 		this.elementMap.clear()
 	}

@@ -133,7 +133,7 @@ export class RemotePageController implements IPageController {
 			| 'execute_javascript',
 	>(
 		action: K,
-		...args: import('./page-control-protocol').PageControlMethodMap[K]['args']
+		...args: import('./page-control-protocol').PageControlRemoteMethods[K]['args']
 	): Promise<ActionResult> {
 		const tabId = this.currentTabId
 		if (!tabId) {

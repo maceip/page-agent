@@ -10,8 +10,14 @@ import type { ActionResult, BrowserState } from '@page-agent/page-controller'
 /**
  * Maps every PAGE_CONTROL action to its [args, return] tuple.
  * This is the single source of truth for the extension's message protocol.
+ *
+ * NOTE: This is NOT a 1:1 map of IPageController — it only covers the
+ * methods that cross the chrome.runtime message boundary. Methods handled
+ * locally by the extension's RemotePageController (getCurrentUrl via
+ * TabsController, showMask/hideMask via storage polling) are intentionally
+ * absent.
  */
-export interface PageControlMethodMap {
+export interface PageControlRemoteMethods {
 	get_last_update_time: { args: []; return: number }
 	get_browser_state: { args: []; return: BrowserState }
 	update_tree: { args: []; return: string }
@@ -31,7 +37,7 @@ export interface PageControlMethodMap {
 }
 
 /** All valid PAGE_CONTROL action names */
-export type PageControlAction = keyof PageControlMethodMap
+export type PageControlAction = keyof PageControlRemoteMethods
 
 /** Maps snake_case action names to camelCase method names on PageController */
 export const ACTION_TO_METHOD = {
@@ -52,15 +58,21 @@ export interface PageControlMessage<K extends PageControlAction = PageControlAct
 	type: 'PAGE_CONTROL'
 	action: K
 	targetTabId: number
-	payload?: PageControlMethodMap[K]['args']
+	payload?: PageControlRemoteMethods[K]['args']
 }
 
-/** Send a typed PAGE_CONTROL message over chrome.runtime. */
+/**
+ * Send a typed PAGE_CONTROL message over chrome.runtime.
+ *
+ * Throws a descriptive error instead of silently returning `null` — callers
+ * (RemotePageController) already wrap every action in try/catch and produce
+ * typed `ActionResult` failures, so swallowing errors here only masks bugs.
+ */
 export function sendPageControlMessage<K extends PageControlAction>(
 	action: K,
 	targetTabId: number,
-	...args: PageControlMethodMap[K]['args']
-): Promise<PageControlMethodMap[K]['return']> {
+	...args: PageControlRemoteMethods[K]['args']
+): Promise<PageControlRemoteMethods[K]['return']> {
 	return chrome.runtime
 		.sendMessage({
 			type: 'PAGE_CONTROL',
@@ -69,7 +81,10 @@ export function sendPageControlMessage<K extends PageControlAction>(
 			payload: args.length > 0 ? args : undefined,
 		} satisfies PageControlMessage<K>)
 		.catch((error) => {
-			console.error('[PageControl]', action, error)
-			return null as any
+			const msg =
+				`[PageControl] ${action} failed for tab ${targetTabId}: ` +
+				(error instanceof Error ? error.message : String(error))
+			console.error(msg, error)
+			throw new Error(msg, { cause: error })
 		})
 }
