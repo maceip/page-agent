@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<title>Remote Browser Harness</title>
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			background: #0f1220;
+			color: #eaf0ff;
+			padding: 16px;
+		}
+		#remote-log {
+			white-space: pre-wrap;
+			background: #11162a;
+			padding: 8px;
+			border-radius: 8px;
+			border: 1px solid #2d385d;
+			height: 260px;
+			overflow: auto;
+		}
+		#controls {
+			display: grid;
+			gap: 8px;
+			max-width: 480px;
+			margin-top: 12px;
+		}
+		label {
+			font-size: 12px;
+			display: block;
+		}
+		button,
+		input,
+		select {
+			padding: 8px;
+			font-size: 14px;
+		}
+	</style>
+</head>
+<body>
+	<h2>Remote Harness (browser instance)</h2>
+	<div id="remote-log">Waiting for controller...
+</div>
+
+	<div id="controls">
+		<label>
+			<span>User:</span>
+			<input id="email-field" data-pa-id="43" aria-label="Email" data-pa-role="textbox" placeholder="Email" autocomplete="username" />
+		</label>
+		<button id="login-button" data-pa-id="42" aria-label="Sign In" autocomplete="off">Sign In</button>
+		<label>
+			<span>Plan:</span>
+			<select id="plan-select" data-pa-id="44" data-pa-role="combo">
+				<option value="basic">basic</option>
+				<option value="pro">pro</option>
+				<option value="team">team</option>
+			</select>
+		</label>
+		<p id="status" aria-live="polite">Status: idle</p>
+	</div>
+
+	<script>
+		const remoteLog = []
+		const pushLog = (entry) => {
+			remoteLog.push(entry)
+			document.getElementById('remote-log').textContent = remoteLog.map((item) => JSON.stringify(item)).join('\n')
+		}
+
+		function escapeAttr(value) {
+			return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+		}
+
+		function visibleLabel(el) {
+			if (el.tagName.toLowerCase() === 'button') return el.textContent.trim() || 'button'
+			if (el.tagName.toLowerCase() === 'input') return el.placeholder || el.getAttribute('aria-label') || 'input'
+			if (el.tagName.toLowerCase() === 'select') return el.options?.[0]?.text || 'select'
+			return el.getAttribute('aria-label') || 'element'
+		}
+
+		function roleFromElement(el) {
+			if (el.dataset.paRole) return el.dataset.paRole
+			const tag = el.tagName.toLowerCase()
+			if (tag === 'button') return 'button'
+			if (tag === 'input') return 'textbox'
+			if (tag === 'select') return 'combo'
+			return 'generic'
+		}
+
+		window.__snapshotCounter = 0
+		window.__getSnapshot = () => {
+			const elements = []
+			const lines = []
+
+			for (const el of Array.from(document.querySelectorAll('[data-pa-id]'))) {
+				const id = Number(el.dataset.paId)
+				if (!id) continue
+				const rect = el.getBoundingClientRect()
+				const tag = el.tagName.toLowerCase()
+				const label = visibleLabel(el)
+				const attrs = []
+				if (el.type) attrs.push(`type="${escapeAttr(el.type)}"`)
+				if (el.placeholder) attrs.push(`placeholder="${escapeAttr(el.placeholder)}"`)
+				if (el.getAttribute('aria-label')) attrs.push(`aria-label="${escapeAttr(el.getAttribute('aria-label'))}"`)
+				if (el.getAttribute('autocomplete')) attrs.push(`autocomplete="${escapeAttr(el.getAttribute('autocomplete'))}"`)
+				if (el.href) attrs.push(`href="${escapeAttr(el.href)}"`)
+				if (tag === 'select') {
+					elements.push({
+						id,
+						rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+						role: roleFromElement(el),
+						label,
+						value: el.value,
+						tag,
+						zOrder: 1,
+						inViewport: true,
+						tabIndex: el.tabIndex,
+					})
+					lines.push(`[${id}]<${tag}${attrs.length ? ` ${attrs.join(' ')}` : ''} />`)
+					continue
+				}
+
+				if (tag === 'input') {
+					lines.push(`[${id}]<${tag}${attrs.length ? ` ${attrs.join(' ')}` : ''} />`)
+				} else {
+					lines.push(`[${id}]<${tag}${attrs.length ? ` ${attrs.join(' ')}` : ''}>${escapeAttr(label)}</${tag}>`)
+				}
+
+				elements.push({
+					id,
+					rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+					role: roleFromElement(el),
+					label,
+					tag,
+					value: el.value,
+					zOrder: 1,
+					inViewport: true,
+					tabIndex: el.tabIndex,
+					href: el.href || undefined,
+					inputType: el.type || undefined,
+					placeholder: el.placeholder || undefined,
+				})
+			}
+
+			return {
+				seq: ++window.__snapshotCounter,
+				ts: Date.now(),
+				viewport: {
+					w: window.innerWidth,
+					h: window.innerHeight,
+				},
+				scroll: { x: window.scrollX, y: window.scrollY },
+				dpr: window.devicePixelRatio,
+				url: window.location.href,
+				title: document.title || 'Remote Demo',
+				elements,
+				simplifiedHTML: lines.join('\n'),
+			}
+		}
+
+		function fail(type, message) {
+			return { success: false, type, message }
+		}
+
+		function dispatchMouse(el, options) {
+			const eventInit = {
+				bubbles: true,
+				cancelable: true,
+				clientX: options.x,
+				clientY: options.y,
+			}
+			el.dispatchEvent(new MouseEvent('mousedown', eventInit))
+			el.dispatchEvent(new MouseEvent('mouseup', eventInit))
+			el.dispatchEvent(new MouseEvent('click', eventInit))
+		}
+
+		window.__applyInputEvent = async (event) => {
+			const type = event?.type
+			if (!type) return fail('bad', 'event.type missing')
+			const now = new Date().toISOString()
+			const log = { type, timestamp: now, elementId: event.elementId }
+			if (event.elementId == null && !['wheel'].includes(type)) {
+				const payload = { ...log, success: false, message: 'elementId required' }
+				pushLog(payload)
+				return payload
+			}
+
+			const el = event.elementId != null ? document.querySelector(`[data-pa-id="${event.elementId}"]`) : null
+			switch (type) {
+				case 'click': {
+					if (!el) return fail(type, `No element id ${event.elementId}`)
+					const rect = el.getBoundingClientRect()
+					const x = event.x ?? Math.round(rect.left + rect.width / 2)
+					const y = event.y ?? Math.round(rect.top + rect.height / 2)
+					dispatchMouse(el, { x, y })
+					el.dataset.clicked = '1'
+					document.getElementById('status').textContent = `Clicked ${el.textContent || 'element'} at ${x},${y}`
+					const payload = { ...log, success: true, message: `Clicked element [${event.elementId}]` }
+					pushLog(payload)
+					return payload
+				}
+				case 'focus': {
+					if (!el) return fail(type, `No element id ${event.elementId}`)
+					el.focus()
+					const payload = { ...log, success: true, message: `Focused element [${event.elementId}]` }
+					pushLog(payload)
+					return payload
+				}
+				case 'type': {
+					if (!el) return fail(type, `No element id ${event.elementId}`)
+					el.focus()
+					el.value = `${el.value || ''}${event.text || ''}`
+					el.dispatchEvent(new Event('input', { bubbles: true }))
+					const payload = { ...log, success: true, message: `Typed "${event.text}" into [${event.elementId}]` }
+					pushLog(payload)
+					return payload
+				}
+				case 'select': {
+					if (!el || el.tagName.toLowerCase() !== 'select') return fail(type, `No <select> for id ${event.elementId}`)
+					el.value = event.value
+					el.dispatchEvent(new Event('change', { bubbles: true }))
+					const payload = { ...log, success: true, message: `Selected ${event.value} in [${event.elementId}]` }
+					pushLog(payload)
+					return payload
+				}
+				case 'wheel': {
+					const target = el || document.scrollingElement || document.documentElement
+					if (!target) return fail(type, 'No wheel target')
+					target.scrollBy(0, event.deltaY || 0)
+					target.dispatchEvent(
+						new WheelEvent('wheel', {
+							bubbles: true,
+							cancelable: true,
+							deltaX: event.deltaX || 0,
+							deltaY: event.deltaY || 0,
+							screenX: event.x || window.innerWidth / 2,
+							screenY: event.y || window.innerHeight / 2,
+						})
+					)
+					const payload = { ...log, success: true, message: `Scrolled ${event.deltaY || 0}px using [${event.elementId ?? 'none'}]` }
+					pushLog(payload)
+					return payload
+				}
+				default:
+					return fail(type, `Unsupported event type: ${type}`)
+			}
+		}
+
+		window.__getEventLog = () => [...remoteLog]
+		window.__clearEventLog = () => {
+			remoteLog.length = 0
+			document.getElementById('remote-log').textContent = ''
+		}
+		window.__clearEventLog()
+		window.__initialised = true
+		pushLog({ type: 'system', timestamp: new Date().toISOString(), success: true, message: 'Remote harness initialized' })
+	</script>
+</body>
+</html>
