@@ -8,6 +8,7 @@
         "packages/ui",
         "packages/llms",
         "packages/core",
+        "packages/mirror",
         "packages/page-agent",
         "packages/extension",
         "packages/website"
@@ -37,6 +38,8 @@
         "test:secrets": "vitest run tests/secrets-scan.test.ts",
         "build:bookmarklet": "node scripts/build-bookmarklet.js",
         "test:e2e": "node e2e/memory-system.test.mjs",
+        "demo:e2e:mirror": "node e2e/two-browser-mirror-demo.mjs",
+        "demo:e2e:all": "npm run test:e2e && npm run demo:e2e:mirror",
         "version:ext": "node scripts/ext-version.js",
         "lint": "eslint .",
         "check": "npm run lint && npx prettier --check '**/*.ts' && npx tsc --build --noEmit && npm test && npm run build",

@@ -10,13 +10,51 @@
  * Run: node e2e/memory-system.test.mjs
  */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import puppeteer from 'puppeteer-core'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const CHROMIUM = '/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome'
+
+function resolveChromium() {
+	const envPath =
+		process.env.PUPPETEER_EXECUTABLE_PATH ||
+		process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
+		process.env.CHROMIUM_EXECUTABLE_PATH
+	if (envPath && existsSync(envPath)) return envPath
+
+	// Check Playwright cache
+	const userHome = process.env.HOME || process.env.USERPROFILE || '/root'
+	const cacheRoots = [join(userHome, '.cache', 'ms-playwright'), '/root/.cache/ms-playwright']
+	for (const cacheRoot of cacheRoots) {
+		if (!existsSync(cacheRoot)) continue
+		const entries = readdirSync(cacheRoot, { withFileTypes: true })
+			.filter((e) => e.isDirectory() && e.name.startsWith('chromium'))
+			.map((e) => e.name)
+			.sort((a, b) => b.localeCompare(a))
+		for (const entry of entries) {
+			const base = join(cacheRoot, entry, 'chrome-linux')
+			for (const bin of [join(base, 'chrome'), join(base, 'headless_shell')]) {
+				if (existsSync(bin)) return bin
+			}
+		}
+	}
+
+	// System-installed browsers
+	const candidates = [
+		'/usr/bin/chromium',
+		'/usr/bin/chromium-browser',
+		'/usr/bin/google-chrome-stable',
+		'/usr/bin/google-chrome',
+	]
+	for (const c of candidates) {
+		if (existsSync(c)) return c
+	}
+	throw new Error('No Chromium found. Set PUPPETEER_EXECUTABLE_PATH.')
+}
+
+const CHROMIUM = resolveChromium()
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -627,6 +665,170 @@ async function injectMemoryModules(page) {
 			return imported
 		}
 
+		/**
+		 * Remote-controller integration smoke harness (Phase 1 contract check).
+		 * Generates simplifiedHTML + spatial map, maps stable IDs to RemoteInputEvent flow,
+		 * and emits event payloads using `type` discriminator.
+		 */
+		window.runRemoteControllerPhase1Demo = async function ({
+			simplifiedHTML,
+			spatialElements,
+			url = 'https://app.example.com/login',
+			title = 'Example Login',
+			actionIndex = 42,
+			viewport = { w: 1366, h: 768 },
+			scroll = { x: 0, y: 120 },
+			inputTextValue = 'alice@example.com',
+		} = {}) {
+			const events = []
+			const now = new Date().toISOString()
+			const defaultSpatialElements = [
+				{
+					id: 42,
+					rect: { x: 100, y: 50, w: 160, h: 40 },
+					role: 'button',
+					label: 'Sign In',
+					tag: 'button',
+					zOrder: 1,
+					inViewport: true,
+				},
+				{
+					id: 43,
+					rect: { x: 290, y: 50, w: 220, h: 40 },
+					role: 'textbox',
+					label: 'Email',
+					inputType: 'email',
+					tag: 'input',
+					zOrder: 1,
+					inViewport: true,
+				},
+			]
+
+			const snapshot = {
+				seq: 1,
+				ts: Date.now(),
+				viewport,
+				scroll,
+				dpr: 1,
+				url,
+				title,
+				elements: spatialElements?.length ? spatialElements : defaultSpatialElements,
+				simplifiedHTML:
+					simplifiedHTML ??
+					'[42]<button type="button" aria-label="Sign In" autocomplete="off">Sign In</button>\n[43]<input type="email" placeholder="Email" autocomplete="username" />',
+			}
+
+			function idsFromSimplified(html) {
+				const ids = []
+				for (const match of html.matchAll(/\[(\d+)\]/g)) {
+					ids.push(Number(match[1]))
+				}
+				return Array.from(new Set(ids))
+			}
+
+			const controller = {
+				snapshot,
+				elementMap: new Map(snapshot.elements.map((el) => [el.id, el])),
+
+				getElement(index) {
+					const el = this.elementMap.get(index)
+					if (!el) throw new Error(`Element with ID ${index} not found in spatial map`)
+					return el
+				},
+
+				getBrowserState() {
+					const maxBottom = Math.max(
+						snapshot.viewport.h,
+						...snapshot.elements.map((el) => el.rect.y + el.rect.h + snapshot.scroll.y)
+					)
+					const pixelsAbove = Math.round(snapshot.scroll.y)
+					const pixelsBelow = Math.max(
+						0,
+						Math.round(maxBottom - snapshot.scroll.y - snapshot.viewport.h)
+					)
+					const content = snapshot.simplifiedHTML || '<EMPTY>'
+
+					return {
+						url: snapshot.url,
+						title: snapshot.title,
+						header: `Current Page: [${snapshot.title}](${snapshot.url})\nPage info: ${snapshot.viewport.w}x${snapshot.viewport.h}px viewport\n`,
+						content,
+						footer:
+							pixelsBelow > 4
+								? `... ${pixelsBelow} pixels below - scroll to see more ...`
+								: '[End of page]',
+						pixelsAbove: pixelsAbove > 4 ? pixelsAbove : 0,
+					}
+				},
+
+				async clickElement(index) {
+					const el = this.getElement(index)
+					const x = Math.round(el.rect.x + el.rect.w / 2)
+					const y = Math.round(el.rect.y + el.rect.h / 2)
+					events.push({
+						type: 'click',
+						x,
+						y,
+						elementId: index,
+						timestamp: now,
+					})
+					return {
+						success: true,
+						message: `Clicked element [${index}] (${el.label || el.tag}).`,
+					}
+				},
+
+				async inputText(index, text) {
+					this.getElement(index)
+					events.push({
+						type: 'focus',
+						elementId: index,
+						timestamp: now,
+					})
+					events.push({
+						type: 'type',
+						elementId: index,
+						text,
+						timestamp: now,
+					})
+					return { success: true, message: `Input text (${text}) into element [${index}].` }
+				},
+
+				async scroll({ down, numPages, pixels = undefined, index = 0 }) {
+					const amount = pixels ?? numPages * snapshot.viewport.h
+					events.push({
+						type: 'wheel',
+						x: snapshot.viewport.w / 2,
+						y: snapshot.viewport.h / 2,
+						deltaX: 0,
+						deltaY: down ? amount : -amount,
+						elementId: index,
+						timestamp: now,
+					})
+					return {
+						success: true,
+						message: `Scrolled ${down ? 'down' : 'up'} ${Math.abs(amount)}px.`,
+					}
+				},
+			}
+
+			const browserState = controller.getBrowserState()
+			const clickResult = await controller.clickElement(actionIndex)
+			const inputResult = await controller.inputText(actionIndex, inputTextValue)
+			const scrollResult = await controller.scroll({ down: true, numPages: 1, index: actionIndex })
+			const parsedIds = idsFromSimplified(snapshot.simplifiedHTML)
+
+			return {
+				browserState,
+				clickResult,
+				inputResult,
+				scrollResult,
+				events,
+				parsedIds,
+				snapshotSize: snapshot.simplifiedHTML.length,
+			}
+		}
+
 		// ═══════════════════════════════════════════════════════════════
 		// IDB helpers (raw IndexedDB promise wrappers)
 		// ═══════════════════════════════════════════════════════════════
@@ -1161,6 +1363,71 @@ await test('importFromText handles unstructured text as single observation', asy
 	assert.equal(result.count, 1)
 	assert.equal(result.kind, 'observation')
 	assert.ok(result.tags.includes('imported'))
+})
+
+console.log(
+	'\n\x1b[1m4b. Phase 1 + Phase 2 Integrated Demonstration (Remote controller + Memory bridge)\x1b[0m'
+)
+
+await test('remote click index maps to RemoteInputEvent[type] and transferable memory is importable', async () => {
+	await page.evaluate(() => clearAllMemories())
+
+	const result = await page.evaluate(async () => {
+		const demo = await runRemoteControllerPhase1Demo({
+			simplifiedHTML:
+				'[42]<button type="button" aria-label="Sign In" autocomplete="off">Sign In</button>\n[43]<input type="email" placeholder="Email" autocomplete="username" />',
+			actionIndex: 42,
+			scroll: { x: 0, y: 120 },
+		})
+
+		const transferText = exportAsText([
+			{
+				content: demo.clickResult.message,
+				tags: ['remote-action', 'phase1'],
+				kind: 'workflow_step',
+				scope: 'https://app.example.com/login',
+				source: { agent: 'page-agent' },
+			},
+			{
+				content: demo.inputResult.message,
+				tags: ['remote-action', 'phase2'],
+				kind: 'observation',
+				scope: 'https://app.example.com/login',
+				source: { agent: 'page-agent' },
+			},
+		])
+
+		const imported = await importFromText(transferText)
+		const count = await getMemoryCount()
+		const recalled = await recallMemories({ scope: 'https://app.example.com/login', limit: 10 })
+
+		return {
+			demo,
+			transferText,
+			importedCount: imported.length,
+			totalCount: count,
+			recalledCount: recalled.length,
+			firstEvent: demo.events[0],
+			focusEvent: demo.events[1],
+			typeEvent: demo.events[2],
+			wheelEvent: demo.events[3],
+		}
+	})
+
+	assert.ok(result.demo.parsedIds.includes(42), 'stable id 42 must be present in simplifiedHTML')
+	assert.equal(result.firstEvent.type, 'click')
+	assert.equal(result.firstEvent.elementId, 42)
+	assert.equal(result.firstEvent.x, 180, 'click should target center x of id 42 rect')
+	assert.equal(result.firstEvent.y, 70, 'click should target center y of id 42 rect')
+	assert.equal(result.focusEvent.type, 'focus', 'input should emit focus event')
+	assert.equal(result.typeEvent.type, 'type', 'input should emit type event')
+	assert.equal(result.wheelEvent.type, 'wheel', 'scroll should emit wheel event')
+	assert.equal(result.importedCount, 2, 'transfer payload should import both action logs')
+	assert.equal(result.totalCount, 2)
+	assert.equal(result.recalledCount, 2)
+	assert.ok(result.transferText.includes('[workflow_step]'))
+	assert.ok(result.transferText.includes('[observation]'))
+	assert.ok(result.transferText.includes('Clicked element'))
 })
 
 // ──────────────────────────────────────────────────────────────────────

@@ -65,7 +65,9 @@ export interface AgentConfig extends LLMConfig {
 		 * @param url - Current page URL (window.location.href)
 		 * @returns Instructions string, or undefined/null to skip
 		 */
-		getPageInstructions?: (url: string) => string | undefined | null
+		getPageInstructions?: (
+			url: string
+		) => string | Promise<string | undefined | null> | undefined | null
 	}
 
 	/**

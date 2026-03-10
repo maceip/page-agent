@@ -1,0 +1,48 @@
+{
+    "name": "@page-agent/mirror",
+    "private": false,
+    "version": "1.5.4",
+    "type": "module",
+    "main": "./dist/esm/page-agent-mirror.js",
+    "module": "./dist/esm/page-agent-mirror.js",
+    "types": "./dist/esm/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/esm/index.d.ts",
+            "import": "./dist/esm/page-agent-mirror.js",
+            "default": "./dist/esm/page-agent-mirror.js"
+        }
+    },
+    "files": [
+        "dist/"
+    ],
+    "description": "Browser state mirroring across cold (profile), warm (identity/auth), and hot (visual) layers for page-agent",
+    "keywords": [
+        "page-agent",
+        "browser-mirror",
+        "chrome-profile",
+        "browser-sync",
+        "cloud-agent",
+        "remote-browser"
+    ],
+    "author": "Simon<gaomeng1900>",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/alibaba/page-agent.git"
+    },
+    "homepage": "https://alibaba.github.io/page-agent/",
+    "scripts": {
+        "build": "vite build"
+    },
+    "dependencies": {
+        "@page-agent/core": "1.5.4",
+        "@page-agent/page-controller": "1.5.4"
+    },
+    "peerDependencies": {
+        "zod": "^3.25.0 || ^4.0.0"
+    },
+    "devDependencies": {
+        "zod": "^4.3.5"
+    }
+}

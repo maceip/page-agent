@@ -62,7 +62,7 @@ export class MultiPageAgent extends PageAgentCore {
 
 		super({
 			...config,
-			pageController: pageController as any,
+			pageController: pageController,
 			customTools: customTools,
 			customSystemPrompt: systemPrompt,
 			instructions: {

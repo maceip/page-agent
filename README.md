@@ -75,6 +75,33 @@ await agent.execute('Click the login button')
 
 For more programmatic usage, see [📖 Documentations](https://alibaba.github.io/page-agent/docs/introduction/overview).
 
+## 🧪 Real Browser E2E Demo (Phase 1/2 contract)
+
+From this package directory (`inputs/page-agent`), run:
+
+```bash
+npm run demo:e2e:mirror
+```
+
+This launches two independent Chromium instances (via Puppeteer) and demonstrates:
+
+- remote page snapshot with stable `simplifiedHTML` IDs,
+- mapped remote actions by ID (`click`, `focus`, `type`, `select`, `wheel`),
+- local phase-2 transfer parsing/import flow.
+
+Useful flags:
+
+```bash
+PA_DEMO_HEADLESS=0 npm run demo:e2e:mirror      # show both browser windows
+PA_DEMO_KEEP_OPEN=1 npm run demo:e2e:mirror     # keep windows open (default 60s)
+```
+
+To run both suites in one pass:
+
+```bash
+npm run demo:e2e:all
+```
+
 ## 🤝 Contributing
 
 We welcome contributions from the community! Follow our instructions in [CONTRIBUTING.md](CONTRIBUTING.md) for environment setup and local development.

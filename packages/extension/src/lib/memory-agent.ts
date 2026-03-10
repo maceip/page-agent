@@ -149,34 +149,34 @@ export async function buildMemoryContext(
 /**
  * Create a getPageInstructions callback that injects memory context.
  * Wraps an optional existing callback.
+ *
+ * Now properly async — getPageInstructions supports Promise returns,
+ * so memory recall happens inline instead of the stale-cache hack.
  */
 export function withMemoryInstructions(
-	existingCallback?: (url: string) => string | undefined | null
-): (url: string) => string | undefined | null {
+	existingCallback?: (url: string) => string | Promise<string | undefined | null> | undefined | null
+): (url: string) => Promise<string | undefined | null> {
 	// Cache to avoid redundant IDB reads within the same step
 	let lastUrl = ''
 	let lastResult = ''
 	let lastTime = 0
 
-	return (url: string) => {
-		const existing = existingCallback?.(url) || ''
+	return async (url: string) => {
+		const existing = (await existingCallback?.(url)) || ''
 
 		// Return cached result if same URL and < 2s old
 		if (url === lastUrl && Date.now() - lastTime < 2000) {
 			return existing ? `${existing}\n\n${lastResult}` : lastResult || undefined
 		}
 
-		// Kick off async memory recall — but we need to return synchronously.
-		// Solution: return the cached value now, update cache async for next call.
-		buildMemoryContext(url).then((memoryBlock) => {
-			lastUrl = url
-			lastResult = memoryBlock
-			lastTime = Date.now()
-		})
+		// Now we can properly await memory recall
+		const memoryBlock = await buildMemoryContext(url)
+		lastUrl = url
+		lastResult = memoryBlock
+		lastTime = Date.now()
 
-		// First call returns only existing instructions
-		if (lastResult && url === lastUrl) {
-			return existing ? `${existing}\n\n${lastResult}` : lastResult || undefined
+		if (lastResult) {
+			return existing ? `${existing}\n\n${lastResult}` : lastResult
 		}
 
 		return existing || undefined

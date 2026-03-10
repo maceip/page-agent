@@ -1,7 +1,10 @@
 /**
- * content script for RemotePageController
+ * Content script for RemotePageController.
+ * Receives typed PAGE_CONTROL messages and dispatches them to the local PageController.
  */
 import { PageController } from '@page-agent/page-controller'
+
+import { ACTION_TO_METHOD, type PageControlAction } from './page-control-protocol'
 
 export function initPageController() {
 	let pageController: PageController | null = null
@@ -39,7 +42,6 @@ export function initPageController() {
 			pc.initMask()
 			await pc.showMask()
 		} else {
-			// await getPC().hideMask()
 			if (pageController) {
 				pageController.hideMask()
 				pageController.cleanUpHighlights()
@@ -54,79 +56,47 @@ export function initPageController() {
 		}
 	}, 500)
 
+	/**
+	 * Dispatch a PAGE_CONTROL action to the local PageController.
+	 * This is a trust boundary — the message payload is validated by action name
+	 * (known set from ACTION_TO_METHOD) but args are not re-validated at runtime.
+	 */
+	function dispatch(
+		pc: PageController,
+		action: PageControlAction,
+		payload: unknown[] | undefined
+	): Promise<unknown> {
+		const methodName = ACTION_TO_METHOD[action]
+		const fn = pc[methodName as keyof PageController] as (...args: unknown[]) => Promise<unknown>
+		return fn.apply(pc, payload || [])
+	}
+
 	chrome.runtime.onMessage.addListener((message, sender, sendResponse): true | undefined => {
 		if (message.type !== 'PAGE_CONTROL') {
-			// sendResponse({
-			// 	success: false,
-			// 	error: `[RemotePageController.ContentScript]: Invalid message type: ${message.type}`,
-			// })
 			return
 		}
 
-		const { action, payload } = message
-		const methodName = getMethodName(action)
+		const { action, payload } = message as { action: string; payload?: any[] }
 
-		const pc = getPC() as any
+		// Validate action is known
+		if (!(action in ACTION_TO_METHOD)) {
+			sendResponse({
+				success: false,
+				error: `Unknown PAGE_CONTROL action: ${action}`,
+			})
+			return
+		}
 
-		switch (action) {
-			case 'get_last_update_time':
-			case 'get_browser_state':
-			case 'update_tree':
-			case 'clean_up_highlights':
-			case 'click_element':
-			case 'input_text':
-			case 'select_option':
-			case 'scroll':
-			case 'scroll_horizontally':
-			case 'execute_javascript':
-				pc[methodName](...(payload || []))
-					.then((result: any) => sendResponse(result))
-					.catch((error: any) =>
-						sendResponse({
-							success: false,
-							error: error instanceof Error ? error.message : String(error),
-						})
-					)
-				break
-
-			default:
+		const pc = getPC()
+		dispatch(pc, action as PageControlAction, payload)
+			.then((result) => sendResponse(result))
+			.catch((error) =>
 				sendResponse({
 					success: false,
-					error: `Unknown PAGE_CONTROL action: ${action}`,
+					error: error instanceof Error ? error.message : String(error),
 				})
-		}
+			)
 
 		return true
 	})
-}
-
-function getMethodName(action: string): string {
-	switch (action) {
-		case 'get_last_update_time':
-			return 'getLastUpdateTime' as const
-		case 'get_browser_state':
-			return 'getBrowserState' as const
-		case 'update_tree':
-			return 'updateTree' as const
-		case 'clean_up_highlights':
-			return 'cleanUpHighlights' as const
-
-		// DOM actions
-
-		case 'click_element':
-			return 'clickElement' as const
-		case 'input_text':
-			return 'inputText' as const
-		case 'select_option':
-			return 'selectOption' as const
-		case 'scroll':
-			return 'scroll' as const
-		case 'scroll_horizontally':
-			return 'scrollHorizontally' as const
-		case 'execute_javascript':
-			return 'executeJavascript' as const
-
-		default:
-			return action
-	}
 }

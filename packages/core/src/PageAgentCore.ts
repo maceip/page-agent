@@ -3,7 +3,7 @@
  * All rights reserved.
  */
 import { InvokeError, LLM, type Tool } from '@page-agent/llms'
-import type { BrowserState, PageController } from '@page-agent/page-controller'
+import type { BrowserState, IPageController } from '@page-agent/page-controller'
 import chalk from 'chalk'
 import * as z from 'zod/v4'
 
@@ -33,7 +33,7 @@ export { PeekabooController } from './peekaboo'
 export type { PeekabooConfig, PeekabooStatus } from './peekaboo'
 export type * from './types'
 
-export type PageAgentCoreConfig = AgentConfig & { pageController: PageController }
+export type PageAgentCoreConfig = AgentConfig & { pageController: IPageController }
 
 /**
  * AI agent for browser automation.
@@ -70,7 +70,7 @@ export class PageAgentCore extends EventTarget {
 	readonly config: PageAgentCoreConfig & { maxSteps: number }
 	readonly tools: typeof tools
 	/** PageController for DOM operations */
-	readonly pageController: PageController
+	readonly pageController: IPageController
 
 	task = ''
 	taskId = ''
@@ -427,7 +427,14 @@ export class PageAgentCore extends EventTarget {
 				console.log(chalk.blue.bold('MacroTool input'), input)
 				const action = input.action
 
-				const toolName = Object.keys(action)[0]
+				const actionKeys = Object.keys(action)
+				if (actionKeys.length !== 1) {
+					throw new Error(
+						`Expected exactly one action, got ${actionKeys.length}: [${actionKeys.join(', ')}]. ` +
+							'The LLM must return a single action per step.'
+					)
+				}
+				const toolName = actionKeys[0]
 				const toolInput = action[toolName]
 
 				// Build reflection text, only include non-empty fields
@@ -509,21 +516,27 @@ export class PageAgentCore extends EventTarget {
 		const { instructions, experimentalLlmsTxt } = this.config
 
 		const systemInstructions = instructions?.system?.trim()
-		let pageInstructions: string | undefined
-
 		const url = this.#states.browserState?.url || ''
-		if (instructions?.getPageInstructions && url) {
-			try {
-				pageInstructions = instructions.getPageInstructions(url)?.trim()
-			} catch (error) {
-				console.error(
-					chalk.red('[PageAgent] Failed to execute getPageInstructions callback:'),
-					error
-				)
-			}
-		}
 
-		const llmsTxt = experimentalLlmsTxt && url ? await fetchLlmsTxt(url) : undefined
+		// Fetch page-specific instructions and llms.txt in parallel — they
+		// are independent I/O operations that should not block each other.
+		const pageInstructionsPromise =
+			instructions?.getPageInstructions && url
+				? Promise.resolve(instructions.getPageInstructions(url))
+						.then((raw: string | null | undefined) => raw?.trim())
+						.catch((error: unknown) => {
+							console.error(
+								chalk.red('[PageAgent] Failed to execute getPageInstructions callback:'),
+								error
+							)
+							return undefined
+						})
+				: Promise.resolve(undefined)
+
+		const llmsTxtPromise =
+			experimentalLlmsTxt && url ? fetchLlmsTxt(url) : Promise.resolve(undefined)
+
+		const [pageInstructions, llmsTxt] = await Promise.all([pageInstructionsPromise, llmsTxtPromise])
 
 		if (!systemInstructions && !pageInstructions && !llmsTxt) return ''
 
@@ -591,7 +604,13 @@ export class PageAgentCore extends EventTarget {
 	}
 
 	async #assembleUserPrompt(): Promise<string> {
-		const browserState = this.#states.browserState!
+		const browserState: BrowserState = this.#states.browserState ?? {
+			url: '',
+			title: '',
+			header: '[Page unavailable]',
+			content: '<EMPTY>',
+			footer: '[End of page]',
+		}
 
 		let prompt = ''
 
