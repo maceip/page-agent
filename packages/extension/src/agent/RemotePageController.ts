@@ -1,31 +1,14 @@
-import type { BrowserState } from '@page-agent/page-controller'
+import type { ActionResult, BrowserState, IPageController } from '@page-agent/page-controller'
 
 import type { TabsController } from './TabsController'
-
-const PREFIX = '[RemotePageController]'
-
-function debug(...messages: any[]) {
-	console.debug(`\x1b[90m${PREFIX}\x1b[0m`, ...messages)
-}
-
-function sendMessage(message: {
-	type: 'PAGE_CONTROL'
-	action: string
-	targetTabId: number
-	payload?: any
-}): Promise<any> {
-	return chrome.runtime.sendMessage(message).catch((error) => {
-		console.error(PREFIX, message.action, error)
-		return null
-	})
-}
+import { sendPageControlMessage } from './page-control-protocol'
 
 /**
- * Agent side page controller.
- * - live in the agent env (extension page or content script)
- * - communicates with remote PageController via sw
+ * Agent-side page controller for the extension.
+ * Lives in the agent env (extension page or side panel) and communicates
+ * with the real PageController in the content script via typed messages.
  */
-export class RemotePageController {
+export class RemotePageController implements IPageController {
 	tabsController: TabsController
 
 	constructor(tabsController: TabsController) {
@@ -36,7 +19,13 @@ export class RemotePageController {
 		return this.tabsController.currentTabId
 	}
 
-	private async getCurrentUrl(): Promise<string> {
+	private requireTabId(): number {
+		const id = this.currentTabId
+		if (id == null) throw new Error('tabsController not initialized.')
+		return id
+	}
+
+	async getCurrentUrl(): Promise<string> {
 		if (!this.currentTabId) return ''
 		const { url } = await this.tabsController.getTabInfo(this.currentTabId)
 		return url || ''
@@ -49,24 +38,17 @@ export class RemotePageController {
 	}
 
 	async getLastUpdateTime(): Promise<number> {
-		if (!this.currentTabId) throw new Error('tabsController not initialized.')
-		return sendMessage({
-			type: 'PAGE_CONTROL',
-			action: 'get_last_update_time',
-			targetTabId: this.currentTabId,
-		})
+		return sendPageControlMessage('get_last_update_time', this.requireTabId())
 	}
 
 	async getBrowserState(): Promise<BrowserState> {
-		if (!this.currentTabId) throw new Error('tabsController not initialized.')
-
-		let browserState = {} as BrowserState
-		debug('getBrowserState', this.currentTabId)
-
+		const tabId = this.requireTabId()
 		const currentUrl = await this.getCurrentUrl()
 		const currentTitle = await this.getCurrentTitle()
 
-		if (!this.currentTabId || !isContentScriptAllowed(currentUrl)) {
+		let browserState: BrowserState
+
+		if (!isContentScriptAllowed(currentUrl)) {
 			browserState = {
 				url: currentUrl,
 				title: currentTitle,
@@ -75,70 +57,63 @@ export class RemotePageController {
 				footer: '',
 			}
 		} else {
-			browserState = await sendMessage({
-				type: 'PAGE_CONTROL',
-				action: 'get_browser_state',
-				targetTabId: this.currentTabId,
-			})
+			browserState = await sendPageControlMessage('get_browser_state', tabId)
 		}
 
 		const sum = await this.tabsController.summarizeTabs()
 		browserState.header = sum + '\n\n' + (browserState.header || '')
 
-		debug('getBrowserState: success', this.currentTabId, browserState)
-
 		return browserState
 	}
 
-	async updateTree(): Promise<void> {
+	async updateTree(): Promise<string> {
 		if (!this.currentTabId || !isContentScriptAllowed(await this.getCurrentUrl())) {
-			return
+			return '<EMPTY>'
 		}
-
-		await sendMessage({
-			type: 'PAGE_CONTROL',
-			action: 'update_tree',
-			targetTabId: this.currentTabId,
-		})
+		return sendPageControlMessage('update_tree', this.currentTabId)
 	}
 
 	async cleanUpHighlights(): Promise<void> {
 		if (!this.currentTabId || !isContentScriptAllowed(await this.getCurrentUrl())) {
 			return
 		}
-
-		await sendMessage({
-			type: 'PAGE_CONTROL',
-			action: 'clean_up_highlights',
-			targetTabId: this.currentTabId,
-		})
+		await sendPageControlMessage('clean_up_highlights', this.currentTabId)
 	}
 
-	async clickElement(...args: any[]): Promise<DomActionReturn> {
-		const res = await this.remoteCallDomAction('click_element', args)
-		// @note may cause page navigation, wait for 1 second to ensure the page loading started
+	async clickElement(index: number): Promise<ActionResult> {
+		const res = await this.callAction('click_element', index)
+		// may cause page navigation, wait for loading to start
 		await new Promise((resolve) => setTimeout(resolve, 1000))
 		return res
 	}
 
-	async inputText(...args: any[]): Promise<DomActionReturn> {
-		return this.remoteCallDomAction('input_text', args)
+	async inputText(index: number, text: string): Promise<ActionResult> {
+		return this.callAction('input_text', index, text)
 	}
 
-	async selectOption(...args: any[]): Promise<DomActionReturn> {
-		return this.remoteCallDomAction('select_option', args)
+	async selectOption(index: number, optionText: string): Promise<ActionResult> {
+		return this.callAction('select_option', index, optionText)
 	}
 
-	async scroll(...args: any[]): Promise<DomActionReturn> {
-		return this.remoteCallDomAction('scroll', args)
+	async scroll(options: {
+		down: boolean
+		numPages: number
+		pixels?: number
+		index?: number
+	}): Promise<ActionResult> {
+		return this.callAction('scroll', options)
 	}
 
-	async scrollHorizontally(...args: any[]): Promise<DomActionReturn> {
-		return this.remoteCallDomAction('scroll_horizontally', args)
+	async scrollHorizontally(options: {
+		right: boolean
+		pixels: number
+		index?: number
+	}): Promise<ActionResult> {
+		return this.callAction('scroll_horizontally', options)
 	}
 
-	async executeJavascript(...args: any[]): Promise<DomActionReturn> {
-		return this.remoteCallDomAction('execute_javascript', args)
+	async executeJavascript(script: string): Promise<ActionResult> {
+		return this.callAction('execute_javascript', script)
 	}
 
 	/** @note Managed by content script via storage polling. */
@@ -148,11 +123,22 @@ export class RemotePageController {
 	/** @note Managed by content script via storage polling. */
 	dispose(): void {}
 
-	private async remoteCallDomAction(action: string, payload: any[]): Promise<DomActionReturn> {
-		if (!this.currentTabId) {
+	private async callAction<
+		K extends
+			| 'click_element'
+			| 'input_text'
+			| 'select_option'
+			| 'scroll'
+			| 'scroll_horizontally'
+			| 'execute_javascript',
+	>(
+		action: K,
+		...args: import('./page-control-protocol').PageControlMethodMap[K]['args']
+	): Promise<ActionResult> {
+		const tabId = this.currentTabId
+		if (!tabId) {
 			return { success: false, message: 'RemotePageController not initialized.' }
 		}
-
 		if (!isContentScriptAllowed(await this.getCurrentUrl())) {
 			return {
 				success: false,
@@ -160,19 +146,8 @@ export class RemotePageController {
 					'Operation not allowed on this page. Use open_new_tab to navigate to a web page first.',
 			}
 		}
-
-		return sendMessage({
-			type: 'PAGE_CONTROL',
-			action: action,
-			targetTabId: this.currentTabId!,
-			payload,
-		})
+		return sendPageControlMessage(action, tabId, ...args)
 	}
-}
-
-interface DomActionReturn {
-	success: boolean
-	message: string
 }
 
 /**

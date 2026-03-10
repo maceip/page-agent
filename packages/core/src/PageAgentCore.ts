@@ -3,7 +3,7 @@
  * All rights reserved.
  */
 import { InvokeError, LLM, type Tool } from '@page-agent/llms'
-import type { BrowserState, PageController } from '@page-agent/page-controller'
+import type { BrowserState, IPageController } from '@page-agent/page-controller'
 import chalk from 'chalk'
 import * as z from 'zod/v4'
 
@@ -33,7 +33,7 @@ export { PeekabooController } from './peekaboo'
 export type { PeekabooConfig, PeekabooStatus } from './peekaboo'
 export type * from './types'
 
-export type PageAgentCoreConfig = AgentConfig & { pageController: PageController }
+export type PageAgentCoreConfig = AgentConfig & { pageController: IPageController }
 
 /**
  * AI agent for browser automation.
@@ -70,7 +70,7 @@ export class PageAgentCore extends EventTarget {
 	readonly config: PageAgentCoreConfig & { maxSteps: number }
 	readonly tools: typeof tools
 	/** PageController for DOM operations */
-	readonly pageController: PageController
+	readonly pageController: IPageController
 
 	task = ''
 	taskId = ''
@@ -514,7 +514,8 @@ export class PageAgentCore extends EventTarget {
 		const url = this.#states.browserState?.url || ''
 		if (instructions?.getPageInstructions && url) {
 			try {
-				pageInstructions = instructions.getPageInstructions(url)?.trim()
+				const raw = await instructions.getPageInstructions(url)
+				pageInstructions = raw?.trim()
 			} catch (error) {
 				console.error(
 					chalk.red('[PageAgent] Failed to execute getPageInstructions callback:'),

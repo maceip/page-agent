@@ -43,9 +43,52 @@ export interface BrowserState {
 	footer: string
 }
 
-interface ActionResult {
+export interface ActionResult {
 	success: boolean
 	message: string
+}
+
+/**
+ * The contract that all page controller implementations must satisfy.
+ *
+ * Implemented by:
+ * - `PageController` (local DOM, content script)
+ * - `RemotePageController` (extension, proxies over chrome.runtime)
+ * - `RemotePageController` (@page-agent/mirror, proxies over IHotLayer)
+ */
+export interface IPageController {
+	// -- State Queries --
+	getCurrentUrl(): Promise<string>
+	getLastUpdateTime(): Promise<number>
+	getBrowserState(): Promise<BrowserState>
+
+	// -- DOM Tree --
+	updateTree(): Promise<string>
+	cleanUpHighlights(): Promise<void>
+
+	// -- Element Actions --
+	clickElement(index: number): Promise<ActionResult>
+	inputText(index: number, text: string): Promise<ActionResult>
+	selectOption(index: number, optionText: string): Promise<ActionResult>
+	scroll(options: {
+		down: boolean
+		numPages: number
+		pixels?: number
+		index?: number
+	}): Promise<ActionResult>
+	scrollHorizontally(options: {
+		right: boolean
+		pixels: number
+		index?: number
+	}): Promise<ActionResult>
+	executeJavascript(script: string): Promise<ActionResult>
+
+	// -- Mask --
+	showMask(): Promise<void>
+	hideMask(): Promise<void>
+
+	// -- Lifecycle --
+	dispose(): void
 }
 
 /**
@@ -56,7 +99,7 @@ interface ActionResult {
  * - beforeUpdate: Emitted before the DOM tree is updated.
  * - afterUpdate: Emitted after the DOM tree is updated.
  */
-export class PageController extends EventTarget {
+export class PageController extends EventTarget implements IPageController {
 	private config: PageControllerConfig
 
 	/** Corresponds to eval_page in browser-use */
