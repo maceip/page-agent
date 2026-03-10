@@ -403,10 +403,10 @@ export interface VisualFrame {
 	/** Browser state snapshot taken concurrently with the frame */
 	browserState?: BrowserState
 	/**
-	 * Spatial map extracted via CDP DOMSnapshot.captureSnapshot.
+	 * Micro-DOM spatial map extracted by the dom-extract pipeline.
 	 * Used by the Invisible UI Projector to position transparent input elements.
 	 */
-	spatialMap?: SpatialElement[]
+	spatialMap?: MicroDOMSnapshot
 }
 
 /** Differential frame – only the changed rectangular regions */
@@ -427,39 +427,135 @@ export interface DiffPatch {
 }
 
 // ---------------------------------------------------------------------------
-// Micro-DOM Spatial Map (extracted via CDP DOMSnapshot)
+// Micro-DOM Spatial Map
+// ---------------------------------------------------------------------------
+//
+// Extracted by the dom-extract pipeline (MutationObserver + TreeWalker scan)
+// running inside the cloud browser. Pushed over WebSocket/QUIC as compact
+// JSON snapshots and incremental diffs.
+//
+// The Invisible UI Projector consumes these to render transparent native
+// HTML <input>/<textarea>/<select>/<a>/<button> elements over the video
+// <canvas>, enabling native OS cursors, password managers, autofill, and
+// screen readers to function normally over a flat pixel stream.
 // ---------------------------------------------------------------------------
 
+/** Bounding rectangle in CSS pixels, viewport-relative */
+export interface Rect {
+	x: number
+	y: number
+	w: number
+	h: number
+}
+
+/** Classification of an interactive element */
+export type ElementRole =
+	| 'input'       // <input> (text, email, number, etc.)
+	| 'password'    // <input type="password">
+	| 'checkbox'    // <input type="checkbox">, role="checkbox"
+	| 'radio'       // <input type="radio">, role="radio"
+	| 'select'      // <select>, role="combobox", role="listbox"
+	| 'textarea'    // <textarea>, contentEditable
+	| 'button'      // <button>, role="button", submit inputs
+	| 'link'        // <a>, role="link"
+	| 'file'        // <input type="file">
+	| 'range'       // <input type="range">
+	| 'toggle'      // role="switch", <details>
+	| 'tab'         // role="tab"
+	| 'menuitem'    // role="menuitem"
+	| 'scrollable'  // scrollable containers
+	| 'clickable'   // generic clickable (onclick, cursor:pointer, etc.)
+
 /**
- * A single interactable element's spatial coordinates, extracted from
- * DOMSnapshot.captureSnapshot on the cloud browser.
+ * A single interactive element in the micro-DOM spatial map.
  *
- * Tauri uses this to render transparent HTML <input> elements at the
- * correct positions over the video <canvas>, enabling native OS
- * interactions (cursors, autofill, password managers).
+ * Extracted by the TreeWalker-based scanner with ARIA role classification,
+ * 5-point elementFromPoint occlusion detection, and shadow DOM recursion.
  */
 export interface SpatialElement {
-	/** CSS selector for the element in the remote DOM */
-	selector: string
-	/** Element type hint for the invisible projector */
-	inputType: 'text' | 'password' | 'email' | 'tel' | 'url' | 'search' | 'number' | 'button' | 'select' | 'checkbox' | 'radio' | 'other'
-	/** Bounding box in viewport coordinates */
-	bounds: {
-		x: number
-		y: number
-		width: number
-		height: number
-	}
-	/** Whether the element is currently visible in the viewport */
-	isVisible: boolean
-	/** Whether the element is focused in the remote browser */
-	isFocused: boolean
-	/** Placeholder text (if applicable) */
+	/** Stable numeric ID (persists across scans via WeakMap) */
+	id: number
+	/** Bounding box in CSS pixels, viewport-relative */
+	rect: Rect
+	/** Element classification (ARIA-aware) */
+	role: ElementRole
+	/** Current value (for inputs/textareas/selects) */
+	value?: string
+	/** Placeholder text */
 	placeholder?: string
+	/** Accessible label (aria-label, associated <label>, visible text) */
+	label?: string
+	/** Whether the element is disabled */
+	disabled?: boolean
+	/** Whether the element is checked (checkboxes, radios, toggles) */
+	checked?: boolean
+	/** Element tag name (lowercase) */
+	tag: string
+	/** CSS selector for targeting this element in the remote DOM */
+	selector?: string
+	/** Tab index for focus ordering (-1 if not focusable) */
+	tabIndex?: number
+	/** Paint order / z-index for occlusion sorting */
+	zOrder: number
+	/** Whether element is within viewport (plus threshold) */
+	inViewport: boolean
+	/** Raw input type attribute (e.g. "email", "tel") */
+	inputType?: string
+	/** href for links */
+	href?: string
 	/** Autocomplete hint (e.g. "username", "current-password") */
 	autocomplete?: string
-	/** Node backend ID from CDP DOMSnapshot */
-	backendNodeId: number
+	/** Whether this element is inside an iframe */
+	inIframe?: boolean
+	/** Accumulated iframe offset to viewport origin */
+	frameOffset?: { x: number; y: number }
+	/** Whether the element is currently focused in the remote browser */
+	isFocused?: boolean
+	/** CDP DOMSnapshot backend node ID (for CDP fallback operations) */
+	backendNodeId?: number
+}
+
+/** Full micro-DOM snapshot — sent on initial connection and major DOM changes */
+export interface MicroDOMSnapshot {
+	/** Monotonic sequence number */
+	seq: number
+	/** Capture timestamp (ms since epoch) */
+	ts: number
+	/** Viewport dimensions */
+	viewport: { w: number; h: number }
+	/** Document scroll position */
+	scroll: { x: number; y: number }
+	/** Device pixel ratio */
+	dpr: number
+	/** Page URL */
+	url: string
+	/** Page title */
+	title: string
+	/** All interactive elements */
+	elements: SpatialElement[]
+	/**
+	 * Simplified HTML for LLM consumption.
+	 * Each interactive element rendered as `[id]<tag attrs>label />` using
+	 * stable IDs matching the elements array. Directly usable as
+	 * BrowserState.content for PageAgentCore.
+	 */
+	simplifiedHTML: string
+}
+
+/** Incremental diff — sent when <50% of elements changed */
+export interface MicroDOMDiff {
+	/** Monotonic sequence number */
+	seq: number
+	/** Capture timestamp (ms since epoch) */
+	ts: number
+	/** Updated viewport if changed */
+	viewport?: { w: number; h: number }
+	/** Updated scroll if changed */
+	scroll?: { x: number; y: number }
+	/** Elements added or updated (full element data) */
+	upserted: SpatialElement[]
+	/** Element IDs removed */
+	removed: number[]
 }
 
 // ---------------------------------------------------------------------------

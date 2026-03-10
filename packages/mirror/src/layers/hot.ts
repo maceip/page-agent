@@ -4,6 +4,8 @@ import type {
 	DiffFrame,
 	HotLayerConfig,
 	LayerSyncStatus,
+	MicroDOMDiff,
+	MicroDOMSnapshot,
 	MirrorSessionId,
 	SpatialElement,
 	TauriWindowState,
@@ -23,9 +25,9 @@ import type {
 //     datagrams).  Tauri feeds these frames into a WebCodecs <canvas> that
 //     perfectly overlays the local Chrome window.
 //
-//   - **Micro-DOM Spatial Extractor**: The cloud fires native CDP
-//     DOMSnapshot.captureSnapshot to extract a spatial map — the exact
-//     (x, y, width, height) coordinates of interactable elements.
+//   - **Micro-DOM Spatial Extractor**: An injected script uses TreeWalker
+//     + MutationObserver to push a compact spatial map of interactive
+//     elements (with ARIA roles, occlusion detection, shadow DOM support).
 //
 //   - **Invisible UI Projector**: Tauri receives the spatial map via QUIC
 //     and renders completely transparent native HTML <input> tags directly
@@ -65,11 +67,18 @@ export type RemoteInputEvent =
 	| RemoteKeyboardEvent
 	| RemoteTouchEvent
 	| RemoteWheelEvent
+	| RemoteFocusEvent
+	| RemoteTypeEvent
+	| RemoteSelectEvent
+	| RemoteCheckEvent
+	| RemoteNavigateEvent
 
 export interface RemoteMouseEvent {
 	type: 'mousedown' | 'mouseup' | 'mousemove' | 'click' | 'dblclick' | 'contextmenu'
 	x: number
 	y: number
+	/** Spatial element ID (from micro-DOM) */
+	elementId?: number
 	button?: number
 	timestamp: string
 }
@@ -78,6 +87,8 @@ export interface RemoteKeyboardEvent {
 	type: 'keydown' | 'keyup' | 'keypress'
 	key: string
 	code: string
+	/** Spatial element ID that has focus */
+	elementId?: number
 	modifiers?: {
 		ctrl?: boolean
 		shift?: boolean
@@ -99,6 +110,46 @@ export interface RemoteWheelEvent {
 	y: number
 	deltaX: number
 	deltaY: number
+	/** Spatial element ID of scroll container (if targeting a specific one) */
+	elementId?: number
+	timestamp: string
+}
+
+/** Focus or blur a specific element by its micro-DOM ID */
+export interface RemoteFocusEvent {
+	type: 'focus' | 'blur'
+	elementId: number
+	timestamp: string
+}
+
+/** Type text into an element (higher-level than individual keydown/keyup) */
+export interface RemoteTypeEvent {
+	type: 'type'
+	elementId: number
+	text: string
+	timestamp: string
+}
+
+/** Select a value in a <select> element */
+export interface RemoteSelectEvent {
+	type: 'select'
+	elementId: number
+	value: string
+	timestamp: string
+}
+
+/** Toggle a checkbox/radio/switch */
+export interface RemoteCheckEvent {
+	type: 'check'
+	elementId: number
+	checked: boolean
+	timestamp: string
+}
+
+/** Navigate the remote browser to a URL */
+export interface RemoteNavigateEvent {
+	type: 'navigate'
+	url: string
 	timestamp: string
 }
 
@@ -200,10 +251,11 @@ export interface IHotLayer {
 	onFrame(handler: (frame: VisualFrame | DiffFrame) => void): () => void
 
 	/**
-	 * Subscribe to spatial map updates from the Micro-DOM Spatial Extractor.
-	 * These are extracted via CDP DOMSnapshot.captureSnapshot on the cloud.
+	 * Subscribe to spatial map updates from the micro-DOM extraction pipeline.
+	 * Receives full snapshots on initial scan and major changes, incremental
+	 * diffs when <50% of elements changed.
 	 */
-	onSpatialMapUpdate(handler: (elements: SpatialElement[]) => void): () => void
+	onSpatialMapUpdate(handler: (update: MicroDOMSnapshot | MicroDOMDiff) => void): () => void
 
 	/**
 	 * Request the latest full (non-differential) frame on demand.
@@ -218,9 +270,14 @@ export interface IHotLayer {
 	getRemoteBrowserState(): Promise<BrowserState>
 
 	/**
-	 * Get the latest spatial map from the Micro-DOM extractor.
+	 * Get the latest full spatial map (materialized from last snapshot + diffs).
 	 */
 	getSpatialMap(): SpatialElement[]
+
+	/**
+	 * Get the latest micro-DOM snapshot (full state, not diffs).
+	 */
+	getLatestSnapshot(): MicroDOMSnapshot | null
 
 	// -- Local → Remote (action) --------------------------------------------
 

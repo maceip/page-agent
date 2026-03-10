@@ -27,9 +27,12 @@ export type {
 	ColdLayerConfig,
 	DiffFrame,
 	DiffPatch,
+	ElementRole,
 	FetchInterceptPayload,
 	HotLayerConfig,
 	LayerSyncStatus,
+	MicroDOMDiff,
+	MicroDOMSnapshot,
 	MirrorCloudAgentEvent,
 	MirrorConfig,
 	MirrorErrorEvent,
@@ -42,6 +45,7 @@ export type {
 	MirrorStatusChangeEvent,
 	MirrorVisualHandoffEvent,
 	QuicTransportConfig,
+	Rect,
 	SpatialElement,
 	TauriWindowState,
 	VisualFrame,
@@ -79,10 +83,15 @@ export type {
 	DomMutation,
 	HotLayerMetrics,
 	IHotLayer,
+	RemoteCheckEvent,
+	RemoteFocusEvent,
 	RemoteInputEvent,
 	RemoteKeyboardEvent,
 	RemoteMouseEvent,
+	RemoteNavigateEvent,
+	RemoteSelectEvent,
 	RemoteTouchEvent,
+	RemoteTypeEvent,
 	RemoteWheelEvent,
 	ScrollState,
 	VisualHandoffRequest,
@@ -114,6 +123,12 @@ export type {
 	ListModelsResponse,
 	ListRepositoriesResponse,
 } from './cloud-agent/types'
+
+// -- Remote adapter for PageAgentCore ----------------------------------------
+export { RemotePageController } from './RemotePageController'
+
+// -- Session wiring (RemotePageController ↔ IHotLayer) -----------------------
+export { MirrorSession } from './MirrorSession'
 
 // -- MirrorController (orchestrator) ----------------------------------------
 export type {

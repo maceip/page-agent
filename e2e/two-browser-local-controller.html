@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<title>Local Controller Harness</title>
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			background: #f6f8ff;
+			color: #111827;
+			padding: 16px;
+		}
+		h2 {
+			margin-bottom: 6px;
+		}
+		#local-log,
+		#transfer-text,
+		#import-log {
+			white-space: pre-wrap;
+			font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+			background: #111827;
+			color: #d1fae5;
+			padding: 8px;
+			border-radius: 8px;
+			border: 1px solid #374151;
+			max-height: 240px;
+			overflow: auto;
+		}
+	</style>
+</head>
+<body>
+	<h2>Local Controller Harness</h2>
+	<p>Receives RemoteInputEvent payloads, emits compact transfer block, and parses it back.</p>
+	<div id="local-log">Waiting for demo...</div>
+	<h3>Transfer Text</h3>
+	<pre id="transfer-text"></pre>
+	<h3>Import Result</h3>
+	<pre id="import-log"></pre>
+
+	<script>
+		function log(msg) {
+			const line = `${new Date().toISOString()} - ${msg}`
+			document.getElementById('local-log').textContent = `${document.getElementById('local-log').textContent}\n${line}`
+		}
+
+		function contentHash(input) {
+			const encoder = new TextEncoder()
+			return crypto.subtle.digest('SHA-256', encoder.encode(input)).then((buffer) => {
+				return [...new Uint8Array(buffer)]
+					.map((b) => b.toString(16).padStart(2, '0'))
+					.join('')
+			})
+		}
+
+		function exportAsText(memories, sourceName = 'page-agent') {
+			if (!memories.length) return ''
+			const now = new Date().toISOString()
+			const scopes = [...new Set(memories.map((m) => m.scope).filter((s) => s !== '*'))]
+			const scopeStr = scopes.length > 0 ? scopes.join(', ') : 'various'
+			let text = '--- Page Agent Memory Transfer ---\n'
+			text += `Source: ${sourceName}\n`
+			text += `Time: ${now}\n`
+			text += `Scope: ${scopeStr}\n`
+			text += `Count: ${memories.length}\n\n`
+			text += 'Memories:\n'
+			for (const mem of memories) {
+				const agentTag = mem.source?.agent && mem.source.agent !== 'page-agent' ? ` (from ${mem.source.agent})` : ''
+				const tags = mem.tags.length ? ` [${mem.tags.join(', ')}]` : ''
+				text += `- [${mem.kind}]${agentTag} ${mem.content}${tags}\n`
+			}
+			text += '---\n'
+			return text
+		}
+
+		async function importFromText(text) {
+			const imported = []
+			try {
+				const parsed = JSON.parse(text)
+				if (parsed.version === 1 && Array.isArray(parsed.memories)) {
+					for (const mem of parsed.memories) {
+						imported.push({ ...mem, tags: mem.tags || [] })
+					}
+					return imported
+				}
+			} catch {}
+			const lines = text.split('\n')
+			let source = { agent: 'user' }
+			let scope = '*'
+			for (const line of lines) {
+				if (line.startsWith('Source:')) source = { agent: line.replace('Source:', '').trim() || 'user' }
+				if (line.startsWith('Scope:')) {
+					scope = line.replace('Scope:', '').trim()
+					if (scope === 'various') scope = '*'
+				}
+				const memMatch = /^-\s+\[(\w+)\](?:\s+\(from\s+(\w[\w-]*)\))?\s+(.+)$/.exec(line)
+				if (!memMatch) continue
+				const [, kind, fromAgent, rest] = memMatch
+				const tagMatch = /^(.+?)\s+\[([^\]]+)\]$/.exec(rest)
+				const content = tagMatch ? tagMatch[1].trim() : rest.trim()
+				const tags = tagMatch ? tagMatch[2].split(',').map((t) => t.trim()) : []
+				const memSource = fromAgent ? { ...source, agent: fromAgent } : source
+				const validKinds = ['observation', 'task_result', 'user_preference', 'page_snapshot', 'workflow_step']
+				const memKind = validKinds.includes(kind) ? kind : 'observation'
+				imported.push({
+					content,
+					tags,
+					kind: memKind,
+					scope,
+					source: memSource,
+					importance: 0.5,
+					createdAt: new Date().toISOString(),
+				})
+			}
+			if (imported.length === 0 && text.trim().length > 0) {
+				const cleaned = text
+					.replace(/^---.*---$/gm, '')
+					.replace(/^Source:.*$/gm, '')
+					.replace(/^Time:.*$/gm, '')
+					.replace(/^Scope:.*$/gm, '')
+					.replace(/^Count:.*$/gm, '')
+					.replace(/^Memories:$/gm, '')
+					.trim()
+				if (cleaned.length > 0) {
+					imported.push({
+						content: cleaned.slice(0, 2000),
+						tags: ['imported'],
+						kind: 'observation',
+						scope: '*',
+						source: { agent: 'user' },
+						importance: 0.5,
+						createdAt: new Date().toISOString(),
+					})
+				}
+			}
+			return imported
+		}
+
+		window.__runPhase2Transfer = async function (eventSummaries) {
+			const memories = eventSummaries.map((entry) => ({
+				content: entry.message,
+				tags: entry.tags || ['remote-action'],
+				kind: entry.kind || 'workflow_step',
+				scope: 'https://app.example.com/login',
+				source: { agent: 'page-agent' },
+				importance: 0.8,
+			}))
+			const transferText = exportAsText(memories)
+			document.getElementById('transfer-text').textContent = transferText
+
+			const imported = await importFromText(transferText)
+			const summary = {
+				count: imported.length,
+				kinds: [...new Set(imported.map((m) => m.kind))],
+				digest: imported.map((m) => `${m.kind}:${m.content}`).join(' | '),
+			}
+			document.getElementById('import-log').textContent = JSON.stringify(summary, null, 2)
+			log(`Transferred ${summary.count} memories (${summary.kinds.join(',')})`)
+			return { transferText, ...summary }
+		}
+
+		window.__clear = () => {
+			document.getElementById('local-log').textContent = 'Waiting for demo...'
+			document.getElementById('transfer-text').textContent = ''
+			document.getElementById('import-log').textContent = ''
+		}
+	</script>
+</body>
+</html>
