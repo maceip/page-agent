@@ -3,6 +3,17 @@ name: Deploy Demo
 on:
   push:
     branches: [main]
+    paths:
+      - 'packages/website/**'
+      - 'packages/page-agent/**'
+      - 'packages/core/**'
+      - 'packages/ui/**'
+      - 'packages/llms/**'
+      - 'packages/page-controller/**'
+
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: true
 
 jobs:
   deploy:

@@ -8,12 +8,53 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npx eslint .
+
+      - name: Format check
+        run: npx prettier --check '**/*.ts'
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --build --noEmit
+
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [24]
+        node-version: [20, 22, 24]
 
     steps:
       - uses: actions/checkout@v6
@@ -24,18 +65,25 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
-      # test on default version of npm
-      # - 9.6~10.8 on node@20
-      # - 11.3~11.6 on node@24
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Node and NPM version
-        run: node --version && npm --version
+      - name: Run tests
+        run: npm test
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
-
-      - name: Lint
-        run: npx eslint . && npx prettier --check **/*.ts
+        run: npm ci
 
       - name: Build
         run: npm run build

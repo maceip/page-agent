@@ -28,6 +28,7 @@ dist-ssr
 # env files
 .env
 .env.*
+!.env.example
 
 # extension
 .output
