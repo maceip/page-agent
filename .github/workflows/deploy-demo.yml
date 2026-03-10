@@ -1,18 +1,21 @@
-name: Deploy Demo
+name: Deploy Site (Jungle Gym + Demo)
 
 on:
   push:
     branches: [main]
     paths:
+      - 'jungle-gym/**'
       - 'packages/website/**'
       - 'packages/page-agent/**'
       - 'packages/core/**'
       - 'packages/ui/**'
       - 'packages/llms/**'
       - 'packages/page-controller/**'
+      - '.github/workflows/deploy-demo.yml'
+  workflow_dispatch:
 
 concurrency:
-  group: deploy-demo
+  group: deploy-site
   cancel-in-progress: true
 
 jobs:
@@ -22,6 +25,9 @@ jobs:
       contents: read
       pages: write
       id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - uses: actions/checkout@v6
@@ -35,8 +41,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build demo
+      - name: Build website
         run: npm run build:website
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp -r jungle-gym/* _site/
+          cp -r packages/website/dist _site/docs
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -44,7 +56,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: './packages/website/dist'
+          path: './_site'
 
       - name: Deploy to GitHub Pages
         id: deployment

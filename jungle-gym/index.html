@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocuVault Pro&trade; - Enterprise Document Management Solutions</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--primary:#6c3ce0;--primary-dark:#4a1fb8;--accent:#ff6b35;--bg:#f5f3ff;--card:#fff;--text:#1a1a2e;--muted:#666;--border:#e0daf5;--danger:#e74c3c;--success:#27ae60;--warning:#f39c12}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;min-height:100vh}
+a{color:var(--primary);text-decoration:none}a:hover{text-decoration:underline}
+
+/* Top banner */
+.top-banner{background:linear-gradient(90deg,#ff6b35,#e74c3c,#ff6b35);color:#fff;text-align:center;padding:8px;font-size:13px;font-weight:600;position:relative;z-index:100;animation:flash 2s infinite}
+@keyframes flash{0%,100%{opacity:1}50%{opacity:.7}}
+.top-banner .close-banner{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#fff;font-size:10px;cursor:pointer;opacity:.4;padding:2px}
+
+/* Cookie banner */
+.cookie-banner{position:fixed;bottom:0;left:0;right:0;background:#1a1a2e;color:#fff;padding:20px 30px;z-index:10000;display:flex;align-items:center;gap:20px;font-size:14px;box-shadow:0 -4px 20px rgba(0,0,0,.3)}
+.cookie-banner p{flex:1}
+.cookie-banner .btn-accept{background:var(--primary);color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-weight:600}
+.cookie-banner .btn-settings{background:none;border:1px solid #555;color:#999;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:11px}
+
+/* Newsletter popup */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center}
+.overlay.hidden{display:none}
+.popup{background:#fff;border-radius:16px;padding:40px;max-width:480px;width:90%;position:relative;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.popup h2{font-size:24px;margin-bottom:8px}
+.popup p{color:var(--muted);margin-bottom:20px;font-size:14px}
+.popup .close-popup{position:absolute;top:8px;right:12px;background:none;border:none;font-size:10px;color:#ccc;cursor:pointer}
+.popup input[type="email"]{width:100%;padding:12px;border:2px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:12px}
+.popup .btn-subscribe{width:100%;padding:12px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:15px}
+.popup .no-thanks{font-size:11px;color:#ccc;margin-top:12px;cursor:pointer}
+
+/* Nav */
+nav{background:#fff;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1000;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;padding:0 20px;height:64px}
+.nav-logo{font-size:20px;font-weight:800;color:var(--primary);margin-right:32px;white-space:nowrap}
+.nav-logo span{color:var(--accent)}
+.nav-links{display:flex;gap:4px;flex:1;flex-wrap:wrap}
+.nav-links a,.nav-links .dropdown{position:relative;padding:8px 12px;font-size:13px;color:var(--text);font-weight:500;border-radius:6px;white-space:nowrap}
+.nav-links a:hover,.nav-links .dropdown:hover{background:var(--bg);text-decoration:none}
+.dropdown-content{display:none;position:absolute;top:100%;left:0;background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 0;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.1);z-index:100}
+.dropdown:hover .dropdown-content{display:block}
+.dropdown-content a{display:block;padding:8px 16px;font-size:13px;color:var(--text)}
+.dropdown-content a:hover{background:var(--bg)}
+.nav-actions{display:flex;gap:8px;margin-left:auto;align-items:center}
+.btn{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
+.btn-outline{background:none;border:2px solid var(--primary);color:var(--primary)}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-dark)}
+.btn-accent{background:var(--accent);color:#fff}
+.btn-sm{padding:6px 12px;font-size:12px}
+.btn-lg{padding:12px 24px;font-size:15px}
+.btn-block{width:100%;display:block}
+
+/* Fake ads */
+.ad-banner{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:12px 20px;text-align:center;font-size:13px;position:relative;margin:12px 0;border-radius:8px;cursor:pointer}
+.ad-banner .ad-label{position:absolute;top:4px;right:8px;font-size:9px;opacity:.5}
+.ad-banner .ad-close{position:absolute;top:4px;left:8px;font-size:8px;opacity:.3;cursor:pointer;background:none;border:none;color:#fff}
+.ad-sidebar{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+.ad-sidebar img{width:100%;height:200px;background:linear-gradient(135deg,#f093fb,#f5576c);border-radius:8px;display:block;margin-bottom:8px}
+.ad-sidebar .ad-label{font-size:9px;color:#ccc;text-align:right}
+
+/* Hero */
+.hero{padding:60px 20px;text-align:center;background:linear-gradient(180deg,#fff 0%,var(--bg) 100%)}
+.hero h1{font-size:42px;line-height:1.2;margin-bottom:16px;max-width:700px;margin-left:auto;margin-right:auto}
+.hero h1 span{color:var(--primary)}
+.hero p{font-size:18px;color:var(--muted);max-width:600px;margin:0 auto 30px}
+.hero-buttons{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+/* Main layout */
+.main-layout{max-width:1200px;margin:0 auto;padding:20px;display:grid;grid-template-columns:1fr 280px;gap:24px}
+.main-content{min-width:0}
+
+/* Cards */
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px}
+.card h3{margin-bottom:12px;font-size:18px}
+.card p{color:var(--muted);font-size:14px;line-height:1.6}
+
+/* Forms */
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text)}
+.form-group .required{color:var(--danger)}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:10px 12px;border:2px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;transition:border-color .15s}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:var(--primary)}
+.form-group .hint{font-size:11px;color:var(--muted);margin-top:4px}
+.form-group .error{font-size:11px;color:var(--danger);margin-top:4px;display:none}
+.form-group.has-error input,.form-group.has-error select,.form-group.has-error textarea{border-color:var(--danger)}
+.form-group.has-error .error{display:block}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.checkbox-group{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px}
+.checkbox-group input[type="checkbox"]{margin-top:3px}
+.checkbox-group label{font-size:13px;font-weight:400}
+
+/* Auth pages */
+.auth-container{max-width:440px;margin:40px auto;padding:0 20px}
+.auth-container .card{padding:32px}
+.auth-container h2{text-align:center;margin-bottom:24px}
+.auth-tabs{display:flex;margin-bottom:24px;border-bottom:2px solid var(--border)}
+.auth-tabs button{flex:1;padding:12px;background:none;border:none;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px}
+.auth-tabs button.active{color:var(--primary);border-bottom-color:var(--primary)}
+.divider{text-align:center;color:var(--muted);font-size:12px;margin:16px 0;position:relative}
+.divider::before,.divider::after{content:'';position:absolute;top:50%;width:40%;height:1px;background:var(--border)}
+.divider::before{left:0}.divider::after{right:0}
+.social-buttons{display:flex;gap:8px;margin-bottom:16px}
+.social-buttons button{flex:1;padding:10px;border:2px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;font-size:13px;font-weight:500}
+
+/* Dashboard */
+.dashboard-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px;text-align:center}
+.stat-card .stat-number{font-size:32px;font-weight:800;color:var(--primary)}
+.stat-card .stat-label{font-size:12px;color:var(--muted);margin-top:4px}
+.user-greeting{font-size:24px;font-weight:700;margin-bottom:4px}
+.user-subtitle{color:var(--muted);font-size:14px;margin-bottom:24px}
+
+/* Stepper */
+.stepper{display:flex;margin-bottom:32px;overflow-x:auto;padding-bottom:8px}
+.stepper-step{display:flex;align-items:center;gap:8px;white-space:nowrap;padding:8px 4px}
+.stepper-step .step-num{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:var(--border);color:var(--muted);flex-shrink:0}
+.stepper-step.active .step-num{background:var(--primary);color:#fff}
+.stepper-step.done .step-num{background:var(--success);color:#fff}
+.stepper-step .step-label{font-size:11px;color:var(--muted)}
+.stepper-step.active .step-label{color:var(--primary);font-weight:600}
+.stepper-connector{width:24px;height:2px;background:var(--border);align-self:center;flex-shrink:0}
+
+/* Notification badge */
+.notif-badge{background:var(--danger);color:#fff;font-size:10px;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;margin-left:4px;vertical-align:middle}
+
+/* Chat widget */
+.chat-widget{position:fixed;bottom:80px;right:20px;z-index:5000}
+.chat-bubble{width:56px;height:56px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;box-shadow:0 4px 16px rgba(108,60,224,.4)}
+.chat-window{position:absolute;bottom:70px;right:0;width:320px;background:#fff;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.15);overflow:hidden;display:none}
+.chat-window.open{display:block}
+.chat-header{background:var(--primary);color:#fff;padding:16px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.chat-body{padding:16px;height:200px;overflow-y:auto;font-size:13px;color:var(--muted)}
+.chat-input-row{display:flex;padding:8px;border-top:1px solid var(--border)}
+.chat-input-row input{flex:1;border:none;padding:8px;font-size:13px;outline:none}
+.chat-input-row button{background:var(--primary);color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer}
+
+/* Misc */
+.pricing-badge{display:inline-block;background:#e8f5e9;color:#2e7d32;font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600;margin-left:8px}
+.toast{position:fixed;top:80px;right:20px;background:#1a1a2e;color:#fff;padding:14px 20px;border-radius:10px;font-size:13px;z-index:9998;box-shadow:0 4px 16px rgba(0,0,0,.2);transform:translateX(400px);transition:transform .3s;max-width:340px}
+.toast.show{transform:translateX(0)}
+.toast .toast-close{background:none;border:none;color:#999;float:right;cursor:pointer;margin-left:12px}
+footer{background:#1a1a2e;color:#fff;padding:48px 20px;margin-top:40px}
+.footer-grid{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:32px}
+.footer-grid h4{margin-bottom:16px;font-size:14px}
+.footer-grid a{display:block;color:#999;font-size:13px;padding:3px 0}
+.footer-bottom{max-width:1200px;margin:24px auto 0;padding-top:24px;border-top:1px solid #333;font-size:12px;color:#666;text-align:center}
+
+/* Responsiveness */
+@media(max-width:768px){.main-layout{grid-template-columns:1fr}.form-row{grid-template-columns:1fr}.hero h1{font-size:28px}}
+</style>
+</head>
+<body>
+
+<!-- Top promo banner -->
+<div class="top-banner" id="topBanner">
+  LIMITED TIME: Get 90% off DocuVault Enterprise - Use code <b>SAVE90</b> - Offer expires in <span id="countdown">14:59</span>!
+  <button class="close-banner" onclick="this.parentElement.style.display='none'" aria-label="Close banner">&times;</button>
+</div>
+
+<!-- Cookie consent -->
+<div class="cookie-banner" id="cookieBanner">
+  <p>We use cookies, tracking pixels, browser fingerprinting, and other technologies to enhance your experience, serve personalized ads, and analyze traffic. By continuing to use this site you agree to our 47-page Privacy Policy.</p>
+  <button class="btn-settings">Manage 847 Partners</button>
+  <button class="btn-accept" onclick="document.getElementById('cookieBanner').style.display='none'">Accept All</button>
+</div>
+
+<!-- Newsletter popup (shown after delay) -->
+<div class="overlay hidden" id="newsletterOverlay">
+  <div class="popup">
+    <button class="close-popup" onclick="closeNewsletter()" aria-label="Close">&times;</button>
+    <h2>Wait! Don't leave!</h2>
+    <p>Subscribe to our newsletter and get a FREE 3-day trial of DocuVault Basic (normally $0/mo)!</p>
+    <input type="email" id="newsletterEmail" placeholder="Enter your email address">
+    <button class="btn-subscribe" onclick="closeNewsletter()">YES, I WANT FREE STUFF!</button>
+    <p class="no-thanks" onclick="closeNewsletter()">no thanks, i hate free things</p>
+  </div>
+</div>
+
+<!-- Navigation (logged out) -->
+<nav id="navLoggedOut">
+  <div class="nav-inner">
+    <div class="nav-logo">Docu<span>Vault</span> Pro&trade;</div>
+    <div class="nav-links">
+      <div class="dropdown">
+        Products &#9662;
+        <div class="dropdown-content">
+          <a href="#" data-page="home">DocuVault Basic</a>
+          <a href="#" data-page="home">DocuVault Pro</a>
+          <a href="#" data-page="home">DocuVault Enterprise</a>
+          <a href="#" data-page="home">DocuVault Government</a>
+          <a href="#" data-page="home">DocuVault Education</a>
+          <a href="#" data-page="home">DocuVault Healthcare</a>
+          <a href="#" data-page="home">DocuVault Legal</a>
+        </div>
+      </div>
+      <div class="dropdown">
+        Solutions &#9662;
+        <div class="dropdown-content">
+          <a href="#" data-page="home">By Industry</a>
+          <a href="#" data-page="home">By Team Size</a>
+          <a href="#" data-page="home">By Use Case</a>
+          <a href="#" data-page="home">By Integration</a>
+          <a href="#" data-page="home">By Compliance</a>
+        </div>
+      </div>
+      <div class="dropdown">
+        Resources &#9662;
+        <div class="dropdown-content">
+          <a href="#" data-page="home">Documentation</a>
+          <a href="#" data-page="home">API Reference</a>
+          <a href="#" data-page="home">Webinars</a>
+          <a href="#" data-page="home">Case Studies</a>
+          <a href="#" data-page="home">Blog</a>
+          <a href="#" data-page="home">Community</a>
+          <a href="#" data-page="home">Status Page</a>
+          <a href="#" data-page="home">Changelog</a>
+        </div>
+      </div>
+      <div class="dropdown">
+        Pricing &#9662;
+        <div class="dropdown-content">
+          <a href="#" data-page="home">Compare Plans</a>
+          <a href="#" data-page="home">Enterprise Quote</a>
+          <a href="#" data-page="home">Volume Discounts</a>
+          <a href="#" data-page="home">Non-Profit Pricing</a>
+        </div>
+      </div>
+      <a href="#" data-page="home">Integrations</a>
+      <a href="#" data-page="home">About</a>
+      <a href="#" data-page="home">Contact Sales</a>
+    </div>
+    <div class="nav-actions">
+      <button class="btn btn-outline btn-sm" onclick="showPage('auth')">Log In</button>
+      <button class="btn btn-primary btn-sm" onclick="showPage('auth')">Start Free Trial</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Navigation (logged in) -->
+<nav id="navLoggedIn" style="display:none">
+  <div class="nav-inner">
+    <div class="nav-logo">Docu<span>Vault</span> Pro&trade;</div>
+    <div class="nav-links">
+      <a href="#" onclick="showPage('dashboard');return false">Dashboard</a>
+      <div class="dropdown">
+        Documents &#9662;
+        <div class="dropdown-content">
+          <a href="#" onclick="showPage('dashboard');return false">All Documents</a>
+          <a href="#" onclick="showPage('create');return false">Create New</a>
+          <a href="#" onclick="showPage('dashboard');return false">Shared With Me</a>
+          <a href="#" onclick="showPage('dashboard');return false">Recently Deleted</a>
+          <a href="#" onclick="showPage('dashboard');return false">Starred</a>
+          <a href="#" onclick="showPage('dashboard');return false">Templates</a>
+          <a href="#" onclick="showPage('dashboard');return false">Import</a>
+        </div>
+      </div>
+      <div class="dropdown">
+        Workflows &#9662;
+        <div class="dropdown-content">
+          <a href="#" onclick="showPage('dashboard');return false">Approvals <span class="notif-badge">3</span></a>
+          <a href="#" onclick="showPage('dashboard');return false">E-Signatures</a>
+          <a href="#" onclick="showPage('dashboard');return false">Review Cycles</a>
+          <a href="#" onclick="showPage('dashboard');return false">Automation Rules</a>
+          <a href="#" onclick="showPage('dashboard');return false">Audit Log</a>
+        </div>
+      </div>
+      <div class="dropdown">
+        Team &#9662;
+        <div class="dropdown-content">
+          <a href="#" onclick="showPage('dashboard');return false">Members</a>
+          <a href="#" onclick="showPage('dashboard');return false">Groups</a>
+          <a href="#" onclick="showPage('dashboard');return false">Permissions</a>
+          <a href="#" onclick="showPage('dashboard');return false">Activity Feed</a>
+          <a href="#" onclick="showPage('dashboard');return false">Invitations <span class="notif-badge">12</span></a>
+        </div>
+      </div>
+      <div class="dropdown">
+        Analytics &#9662;
+        <div class="dropdown-content">
+          <a href="#" onclick="showPage('dashboard');return false">Usage Reports</a>
+          <a href="#" onclick="showPage('dashboard');return false">Storage</a>
+          <a href="#" onclick="showPage('dashboard');return false">API Usage</a>
+          <a href="#" onclick="showPage('dashboard');return false">Team Activity</a>
+        </div>
+      </div>
+      <div class="dropdown">
+        Settings &#9662;
+        <div class="dropdown-content">
+          <a href="#" onclick="showPage('dashboard');return false">Profile</a>
+          <a href="#" onclick="showPage('dashboard');return false">Billing</a>
+          <a href="#" onclick="showPage('dashboard');return false">Integrations</a>
+          <a href="#" onclick="showPage('dashboard');return false">API Keys</a>
+          <a href="#" onclick="showPage('dashboard');return false">Notifications</a>
+          <a href="#" onclick="showPage('dashboard');return false">Security</a>
+          <a href="#" onclick="showPage('dashboard');return false">Appearance</a>
+        </div>
+      </div>
+      <a href="#" onclick="showPage('dashboard');return false">Help <span class="notif-badge">5</span></a>
+    </div>
+    <div class="nav-actions">
+      <button class="btn btn-accent btn-sm" onclick="showPage('create')">+ New Document</button>
+      <button class="btn btn-outline btn-sm" onclick="doLogout()">Log Out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- =================== PAGE: HOME =================== -->
+<div id="page-home">
+  <div class="ad-banner">
+    <span class="ad-label">AD</span>
+    <button class="ad-close" onclick="this.parentElement.style.display='none'">&times;</button>
+    Tired of losing documents? Try CloudSync Ultra&trade; - Now with AI-powered folder suggestions!
+  </div>
+
+  <div class="hero">
+    <h1>The <span>#1 Enterprise</span> Document Management Platform</h1>
+    <p>Trusted by 3 companies worldwide. Streamline your document workflows with our AI-powered, blockchain-adjacent, synergy-optimized platform.</p>
+    <div class="hero-buttons">
+      <button class="btn btn-primary btn-lg" onclick="showPage('auth')">Start Free Trial</button>
+      <button class="btn btn-outline btn-lg" onclick="showPage('auth')">Watch 47-min Demo</button>
+      <button class="btn btn-sm" style="background:#eee" onclick="showPage('auth')">Talk to Sales</button>
+    </div>
+  </div>
+
+  <div class="main-layout">
+    <div class="main-content">
+      <div class="ad-banner" style="background:linear-gradient(135deg,#f093fb,#f5576c)">
+        <span class="ad-label">SPONSORED</span>
+        <button class="ad-close" onclick="this.parentElement.style.display='none'">&times;</button>
+        MegaCorp Cloud Storage - Store up to 5MB FREE! Enterprise plans starting at $999/mo
+      </div>
+
+      <div class="card">
+        <h3>Why DocuVault Pro?</h3>
+        <p>Our revolutionary platform leverages cutting-edge paradigm shifts to deliver best-in-class document management solutions that synergistically optimize your workflow verticals. With our proprietary QuantumSort&trade; algorithm, documents practically organize themselves (results may vary).</p>
+      </div>
+      <div class="card">
+        <h3>Trusted by Industry Leaders</h3>
+        <p>"DocuVault changed how we think about documents. We used to store them in folders. Now we store them in DocuVault folders." - John D., Definitely Real Company</p>
+      </div>
+      <div class="card">
+        <h3>Enterprise-Grade Security</h3>
+        <p>256-bit encryption, SOC2 Type II compliant (pending), GDPR ready (we think), and ISO 27001 adjacent. Your documents are almost certainly safe with us.</p>
+      </div>
+
+      <div class="ad-banner" style="background:linear-gradient(135deg,#a18cd1,#fbc2eb)">
+        <span class="ad-label">AD</span>
+        <button class="ad-close" onclick="this.parentElement.style.display='none'">&times;</button>
+        TaskMaster Pro: The todo list app that also sends you motivational quotes at 3am! Download now!
+      </div>
+
+      <div class="card">
+        <h3>Pricing That Makes Sense*</h3>
+        <p>Free tier: 1 document, 500KB storage, no sharing, view-only on weekdays.<br>
+        Pro tier ($49/mo): 10 documents, 5MB storage, sharing with up to 2 people.<br>
+        Enterprise tier (Contact Sales): Unlimited everything! (fair use policy applies, see appendix J)</p>
+        <p style="font-size:10px;color:#ccc;margin-top:12px">*Pricing does not include platform fee ($9.99/mo), maintenance surcharge ($4.99/mo), or the mandatory "Innovation Tax" ($2.99/mo)</p>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="ad-sidebar">
+        <div style="width:100%;height:200px;background:linear-gradient(135deg,#f093fb,#f5576c);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px">YOUR AD HERE<br><span style="font-size:11px;font-weight:400">$49.99/week</span></div>
+        <span class="ad-label">ADVERTISEMENT</span>
+      </div>
+      <div class="ad-sidebar">
+        <div style="width:100%;height:150px;background:linear-gradient(135deg,#a1c4fd,#c2e9fb);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#333;font-weight:600;font-size:14px;text-align:center;padding:12px">Download our<br>MOBILE APP<br><span style="font-size:11px;font-weight:400">Available on<br>Palm OS & Blackberry</span></div>
+        <span class="ad-label">SPONSORED</span>
+      </div>
+      <div class="card" style="padding:16px">
+        <h3 style="font-size:14px;margin-bottom:8px">Trending on DocuVault</h3>
+        <p style="font-size:12px">#DocuVaultDown #WeAreSorry #PleaseRenew #DocumentGoals #SynergyOptimized</p>
+      </div>
+      <div class="ad-sidebar">
+        <div style="width:100%;height:120px;background:linear-gradient(135deg,#ffecd2,#fcb69f);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#333;font-weight:600;font-size:14px;text-align:center;padding:12px">Learn Blockchain<br>in 48 hours!<br><span style="font-size:11px;font-weight:400">Only $4,999</span></div>
+        <span class="ad-label">AD</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =================== PAGE: AUTH =================== -->
+<div id="page-auth" style="display:none">
+  <div class="ad-banner">
+    <span class="ad-label">AD</span>
+    <button class="ad-close" onclick="this.parentElement.style.display='none'">&times;</button>
+    CodeAcademy Ultra - Learn to code while you sign up for other things! Use code MULTITASK for 10% off
+  </div>
+
+  <div class="auth-container">
+    <div class="card">
+      <div class="auth-tabs">
+        <button class="active" id="tabLogin" onclick="switchAuthTab('login')">Log In</button>
+        <button id="tabSignup" onclick="switchAuthTab('signup')">Create Account</button>
+      </div>
+
+      <!-- Login form -->
+      <div id="loginForm">
+        <div class="social-buttons">
+          <button onclick="showToast('Social login requires Enterprise plan')">Google</button>
+          <button onclick="showToast('Social login requires Enterprise plan')">GitHub</button>
+          <button onclick="showToast('Social login requires Enterprise plan')">SSO</button>
+        </div>
+        <div class="divider">or continue with email</div>
+        <div class="form-group">
+          <label>Email Address <span class="required">*</span></label>
+          <input type="email" id="loginEmail" placeholder="you@company.com">
+        </div>
+        <div class="form-group">
+          <label>Password <span class="required">*</span></label>
+          <input type="password" id="loginPassword" placeholder="Enter your password">
+          <div class="hint"><a href="#" onclick="showToast('Password reset requires phone verification, a notarized letter, and 3-5 business days');return false">Forgot password?</a></div>
+        </div>
+        <div class="form-group">
+          <label>Organization ID (optional)</label>
+          <input type="text" placeholder="e.g., ORG-XXXX-XXXX">
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="loginRemember">
+          <label for="loginRemember">Remember me on this device</label>
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="loginTos" required>
+          <label for="loginTos">I agree to the <a href="#">Terms of Service</a>, <a href="#">Privacy Policy</a>, <a href="#">Cookie Policy</a>, <a href="#">Acceptable Use Policy</a>, and <a href="#">Community Guidelines</a> <span class="required">*</span></label>
+        </div>
+        <button class="btn btn-primary btn-block btn-lg" onclick="doLogin()" style="margin-top:16px">Log In</button>
+      </div>
+
+      <!-- Signup form -->
+      <div id="signupForm" style="display:none">
+        <div class="social-buttons">
+          <button onclick="showToast('Social signup coming Q4 2027')">Google</button>
+          <button onclick="showToast('Social signup coming Q4 2027')">GitHub</button>
+        </div>
+        <div class="divider">or create account with email</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>First Name <span class="required">*</span></label>
+            <input type="text" id="signupFirst" placeholder="First name">
+          </div>
+          <div class="form-group">
+            <label>Last Name <span class="required">*</span></label>
+            <input type="text" id="signupLast" placeholder="Last name">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Email Address <span class="required">*</span></label>
+          <input type="email" id="signupEmail" placeholder="you@company.com">
+        </div>
+        <div class="form-group">
+          <label>Password <span class="required">*</span></label>
+          <input type="password" id="signupPassword" placeholder="Min 8 characters">
+          <div class="hint">Must contain: uppercase, lowercase, number, special character, emoji, and a haiku</div>
+        </div>
+        <div class="form-group">
+          <label>Confirm Password <span class="required">*</span></label>
+          <input type="password" id="signupConfirm" placeholder="Type it again">
+        </div>
+        <div class="form-group">
+          <label>Company / Organization</label>
+          <input type="text" id="signupCompany" placeholder="Company name">
+        </div>
+        <div class="form-group">
+          <label>Job Title</label>
+          <select id="signupRole">
+            <option value="">Select your role...</option>
+            <option>CEO / Founder</option>
+            <option>CTO / VP Engineering</option>
+            <option>Product Manager</option>
+            <option>Designer</option>
+            <option>Developer</option>
+            <option>Marketing</option>
+            <option>Sales</option>
+            <option>HR</option>
+            <option>Legal</option>
+            <option>Finance</option>
+            <option>Operations</option>
+            <option>Student</option>
+            <option>Other (please specify in the field below)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>How did you hear about us? <span class="required">*</span></label>
+          <select id="signupSource" required>
+            <option value="">Select one...</option>
+            <option>Google Search</option>
+            <option>Social Media</option>
+            <option>Friend / Colleague</option>
+            <option>Conference / Event</option>
+            <option>Blog Post</option>
+            <option>Podcast</option>
+            <option>Skywriting</option>
+            <option>Dream</option>
+            <option>Carrier Pigeon</option>
+            <option>Psychic Premonition</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Team Size</label>
+          <select id="signupTeamSize">
+            <option value="">Select...</option>
+            <option>Just me</option>
+            <option>2-10</option>
+            <option>11-50</option>
+            <option>51-200</option>
+            <option>201-1000</option>
+            <option>1000+</option>
+            <option>It's complicated</option>
+          </select>
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="signupTos" required>
+          <label for="signupTos">I agree to the <a href="#">Terms of Service</a> (47 pages) <span class="required">*</span></label>
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="signupPrivacy" required>
+          <label for="signupPrivacy">I have read and understood the <a href="#">Privacy Policy</a> (89 pages) <span class="required">*</span></label>
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="signupMarketing">
+          <label for="signupMarketing">Send me product updates, newsletters, promotional emails, partner offers, daily horoscopes, and weather reports</label>
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="signupNoMarketing">
+          <label for="signupNoMarketing">Actually, please don't email me (we'll email you anyway)</label>
+        </div>
+        <button class="btn btn-primary btn-block btn-lg" onclick="doSignup()" style="margin-top:16px">Create Account</button>
+        <p style="font-size:11px;color:var(--muted);text-align:center;margin-top:12px">By clicking "Create Account" you also agree to receive up to 47 emails per day</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =================== PAGE: DASHBOARD =================== -->
+<div id="page-dashboard" style="display:none">
+  <div class="ad-banner">
+    <span class="ad-label">AD</span>
+    <button class="ad-close" onclick="this.parentElement.style.display='none'">&times;</button>
+    Upgrade to DocuVault Enterprise to remove this ad (and see different ads)!
+  </div>
+  <div class="main-layout">
+    <div class="main-content">
+      <div class="user-greeting" id="dashboardGreeting">Welcome back!</div>
+      <div class="user-subtitle">You have <b>3</b> pending approvals, <b>12</b> unread notifications, and <b>1</b> document expiring soon.</div>
+
+      <div class="dashboard-grid">
+        <div class="stat-card"><div class="stat-number">0</div><div class="stat-label">Documents</div></div>
+        <div class="stat-card"><div class="stat-number">0 B</div><div class="stat-label">Storage Used</div></div>
+        <div class="stat-card"><div class="stat-number">0</div><div class="stat-label">Shared</div></div>
+        <div class="stat-card"><div class="stat-number">47</div><div class="stat-label">Notifications</div></div>
+      </div>
+
+      <div class="card">
+        <h3>Quick Actions</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+          <button class="btn btn-primary btn-sm" onclick="showPage('create')">Create Document</button>
+          <button class="btn btn-outline btn-sm" onclick="showToast('No templates available on Free plan')">Use Template</button>
+          <button class="btn btn-outline btn-sm" onclick="showToast('Import requires Pro plan')">Import</button>
+          <button class="btn btn-outline btn-sm" onclick="showToast('Bulk upload requires Enterprise plan')">Bulk Upload</button>
+          <button class="btn btn-outline btn-sm" onclick="showToast('AI features coming Q3 2028')">AI Summarize</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Recent Documents</h3>
+        <p style="text-align:center;padding:40px 0;color:var(--muted)">No documents yet. <a href="#" onclick="showPage('create');return false">Create your first document</a> to get started!</p>
+      </div>
+
+      <div class="ad-banner" style="background:linear-gradient(135deg,#43e97b,#38f9d7)">
+        <span class="ad-label">FEATURED</span>
+        <button class="ad-close" onclick="this.parentElement.style.display='none'">&times;</button>
+        New! DocuVault AI Assistant - Let AI read your documents so you don't have to! Only $29.99/mo extra
+      </div>
+
+      <div class="card">
+        <h3>Team Activity</h3>
+        <p style="color:var(--muted);font-size:13px">No team members yet. <a href="#" onclick="showToast('Team invites require Pro plan');return false">Invite colleagues</a> to collaborate!</p>
+      </div>
+    </div>
+    <div class="sidebar">
+      <div class="card" style="padding:16px">
+        <h3 style="font-size:14px;margin-bottom:8px">Your Plan: Free</h3>
+        <p style="font-size:12px;color:var(--muted)">1 document limit, 500KB storage</p>
+        <button class="btn btn-accent btn-sm btn-block" style="margin-top:8px" onclick="showToast('Upgrade requires a 30-minute sales call')">Upgrade Now</button>
+      </div>
+      <div class="ad-sidebar">
+        <div style="width:100%;height:150px;background:linear-gradient(135deg,#ffecd2,#fcb69f);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#333;font-weight:600;font-size:14px;text-align:center;padding:12px">Increase<br>Productivity<br>by 0.3%<br><span style="font-size:11px;font-weight:400">with DocuVault Pro</span></div>
+        <span class="ad-label">AD</span>
+      </div>
+      <div class="card" style="padding:16px">
+        <h3 style="font-size:14px;margin-bottom:8px">Storage</h3>
+        <div style="background:var(--border);border-radius:4px;height:8px;margin:8px 0"><div style="background:var(--primary);border-radius:4px;height:8px;width:0%"></div></div>
+        <p style="font-size:11px;color:var(--muted)">0 B / 500 KB used</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =================== PAGE: CREATE DOCUMENT (Multi-step form) =================== -->
+<div id="page-create" style="display:none">
+  <div class="main-layout" style="grid-template-columns:1fr">
+    <div style="max-width:760px;margin:0 auto;width:100%">
+      <h2 style="margin-bottom:4px">Create New Document</h2>
+      <p style="color:var(--muted);font-size:14px;margin-bottom:24px">Complete all steps to submit your document for review.</p>
+
+      <!-- Stepper -->
+      <div class="stepper" id="stepper"></div>
+
+      <!-- Step containers -->
+      <div class="card" id="stepContainer">
+        <!-- Steps rendered by JS -->
+      </div>
+
+      <div style="display:flex;justify-content:space-between;margin-top:16px">
+        <button class="btn btn-outline" id="btnPrev" onclick="prevStep()" style="display:none">&larr; Previous</button>
+        <div style="flex:1"></div>
+        <button class="btn btn-primary" id="btnNext" onclick="nextStep()">Next Step &rarr;</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Chat widget -->
+<div class="chat-widget" id="chatWidget">
+  <div class="chat-window" id="chatWindow">
+    <div class="chat-header">
+      DocuBot AI Assistant
+      <button style="background:none;border:none;color:#fff;cursor:pointer" onclick="toggleChat()">&times;</button>
+    </div>
+    <div class="chat-body">
+      <p>Hi there! I'm DocuBot, your AI assistant. I can help you with:</p><br>
+      <p>- Navigating our 47 menu items</p>
+      <p>- Understanding our pricing (good luck)</p>
+      <p>- Filling out our 15-step form</p>
+      <p>- Existential questions</p><br>
+      <p style="color:#ccc;font-size:11px">Note: I'm not actually AI, I just say things confidently.</p>
+    </div>
+    <div class="chat-input-row">
+      <input type="text" placeholder="Type a message..." onkeydown="if(event.key==='Enter'){showToast('DocuBot is thinking... forever');this.value=''}">
+      <button onclick="showToast('DocuBot is thinking... forever')">Send</button>
+    </div>
+  </div>
+  <div class="chat-bubble" onclick="toggleChat()">&#128172;</div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"><button class="toast-close" onclick="hideToast()">&times;</button> <span id="toastMsg"></span></div>
+
+<!-- Footer -->
+<footer>
+  <div class="footer-grid">
+    <div>
+      <h4>Product</h4>
+      <a href="#">Features</a><a href="#">Pricing</a><a href="#">Security</a><a href="#">Uptime SLA</a><a href="#">Roadmap</a><a href="#">Changelog</a>
+    </div>
+    <div>
+      <h4>Company</h4>
+      <a href="#">About Us</a><a href="#">Careers (we're hiring!)</a><a href="#">Press Kit</a><a href="#">Brand Guidelines</a><a href="#">Investors</a>
+    </div>
+    <div>
+      <h4>Resources</h4>
+      <a href="#">Documentation</a><a href="#">API Reference</a><a href="#">Community</a><a href="#">Blog</a><a href="#">Webinars</a><a href="#">Podcast</a>
+    </div>
+    <div>
+      <h4>Legal</h4>
+      <a href="#">Terms of Service</a><a href="#">Privacy Policy</a><a href="#">Cookie Policy</a><a href="#">GDPR</a><a href="#">CCPA</a><a href="#">Acceptable Use</a><a href="#">Export Control</a><a href="#">Subprocessor List</a>
+    </div>
+    <div>
+      <h4>Support</h4>
+      <a href="#">Help Center</a><a href="#">Contact Us</a><a href="#">System Status</a><a href="#">Feature Request</a><a href="#">Bug Report</a><a href="#">Carrier Pigeon</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    &copy; 2026 DocuVault Pro&trade;. All rights reserved. All wrongs reversed. Built with &#9829; and questionable design choices.
+  </div>
+</footer>
+
+<script>
+// ========== STATE ==========
+let currentUser = JSON.parse(localStorage.getItem('docuvault_user') || 'null');
+let currentStep = 0;
+const formData = {};
+
+// ========== STEPS DEFINITION ==========
+const steps = [
+  {
+    title: "Document Type",
+    fields: [
+      { id: "docType", label: "Document Type", type: "select", required: true,
+        options: ["", "Report", "Proposal", "Contract", "Invoice", "Memo", "Whitepaper", "Policy", "Manual", "Presentation", "Spreadsheet", "Letter", "Certificate", "Other"] },
+      { id: "docSubtype", label: "Document Subtype", type: "select", required: true,
+        options: ["", "Internal", "External", "Confidential", "Public", "Draft", "Final", "Archive"] },
+      { id: "docPriority", label: "Priority Level", type: "select", required: true,
+        options: ["", "Critical (P0)", "High (P1)", "Medium (P2)", "Low (P3)", "Trivial (P4)", "Negative Priority (P5)"] }
+    ]
+  },
+  {
+    title: "Basic Information",
+    fields: [
+      { id: "docTitle", label: "Document Title", type: "text", required: true, placeholder: "Enter a descriptive title (max 200 chars)" },
+      { id: "docSubtitle", label: "Subtitle / Tagline", type: "text", placeholder: "Optional subtitle" },
+      { id: "docRef", label: "Reference Number", type: "text", placeholder: "e.g., DOC-2026-XXXX (auto-generated if blank)" }
+    ]
+  },
+  {
+    title: "Author Details",
+    fields: [
+      { id: "authorName", label: "Primary Author", type: "text", required: true, placeholder: "Full name" },
+      { id: "authorEmail", label: "Author Email", type: "email", required: true, placeholder: "author@company.com" },
+      { id: "authorDept", label: "Department", type: "select", required: true,
+        options: ["", "Engineering", "Product", "Design", "Marketing", "Sales", "Legal", "Finance", "HR", "Operations", "Executive", "Janitorial", "Vibes"] },
+      { id: "coAuthors", label: "Co-Authors (comma separated)", type: "text", placeholder: "jane@co.com, bob@co.com" }
+    ]
+  },
+  {
+    title: "Classification",
+    fields: [
+      { id: "category", label: "Primary Category", type: "select", required: true,
+        options: ["", "Business", "Technical", "Legal", "Financial", "HR", "Marketing", "Engineering", "Research", "Compliance", "Miscellaneous", "Unclassifiable"] },
+      { id: "subcategory", label: "Secondary Category", type: "select",
+        options: ["", "Strategy", "Operations", "Planning", "Review", "Audit", "Training", "Policy", "Procedure", "Guideline"] },
+      { id: "confidentiality", label: "Confidentiality Level", type: "select", required: true,
+        options: ["", "Public", "Internal", "Confidential", "Restricted", "Top Secret", "Eyes Only", "Burn After Reading"] }
+    ]
+  },
+  {
+    title: "Keywords & Tags",
+    fields: [
+      { id: "keywords", label: "Keywords (comma separated)", type: "text", required: true, placeholder: "e.g., quarterly, finance, review" },
+      { id: "tags", label: "Tags", type: "text", placeholder: "e.g., #urgent #review #2026" },
+      { id: "language", label: "Document Language", type: "select", required: true,
+        options: ["", "English", "Spanish", "French", "German", "Chinese", "Japanese", "Korean", "Klingon", "Pig Latin", "Emoji Only"] }
+    ]
+  },
+  {
+    title: "Description",
+    fields: [
+      { id: "summary", label: "Executive Summary", type: "textarea", required: true, placeholder: "Provide a brief summary (min 50 characters)...", rows: 4 },
+      { id: "purpose", label: "Document Purpose", type: "textarea", required: true, placeholder: "Why does this document exist?", rows: 3 }
+    ]
+  },
+  {
+    title: "Target Audience",
+    fields: [
+      { id: "audience", label: "Primary Audience", type: "select", required: true,
+        options: ["", "All Employees", "Management", "Board of Directors", "Customers", "Partners", "Regulators", "The General Public", "Future Archaeologists"] },
+      { id: "audienceSize", label: "Expected Audience Size", type: "select",
+        options: ["", "1-10", "11-50", "51-200", "201-1000", "1000+", "The Entire Internet"] },
+      { id: "accessLevel", label: "Required Access Level to Read", type: "select", required: true,
+        options: ["", "Anyone", "Authenticated Users", "Team Members", "Managers Only", "C-Suite Only", "No One (Filing Purposes Only)"] }
+    ]
+  },
+  {
+    title: "Review Settings",
+    fields: [
+      { id: "reviewRequired", label: "Review Required?", type: "select", required: true,
+        options: ["", "Yes - Single Reviewer", "Yes - Dual Reviewer", "Yes - Committee Review", "Yes - Board Approval", "No Review Needed", "It's Complicated"] },
+      { id: "reviewDeadline", label: "Review Deadline", type: "date", required: true },
+      { id: "reviewNotes", label: "Notes for Reviewer", type: "textarea", placeholder: "Any special instructions...", rows: 3 }
+    ]
+  },
+  {
+    title: "Compliance & Legal",
+    fields: [
+      { id: "regulatory", label: "Regulatory Framework", type: "select",
+        options: ["", "None", "SOX", "HIPAA", "GDPR", "CCPA", "SOC2", "ISO 27001", "PCI-DSS", "All of the above", "None of the above but we're paranoid"] },
+      { id: "retention", label: "Retention Period", type: "select", required: true,
+        options: ["", "30 days", "90 days", "1 year", "3 years", "7 years", "Forever", "Until the heat death of the universe"] },
+      { id: "legalReview", label: "Legal Review Required?", type: "select", required: true,
+        options: ["", "Yes", "No", "Maybe", "Ask Legal (they won't respond)"] }
+    ]
+  },
+  {
+    title: "Formatting",
+    fields: [
+      { id: "format", label: "Output Format", type: "select", required: true,
+        options: ["", "PDF", "DOCX", "HTML", "Markdown", "Plain Text", "LaTeX", "Stone Tablet", "Interpretive Dance Notation"] },
+      { id: "pageSize", label: "Page Size", type: "select",
+        options: ["", "A4", "Letter", "Legal", "A3", "Tabloid", "Custom (specify in notes)"] },
+      { id: "template", label: "Template", type: "select",
+        options: ["", "Default", "Corporate", "Minimal", "Formal", "Creative", "Brutalist", "None (chaos mode)"] }
+    ]
+  },
+  {
+    title: "Distribution",
+    fields: [
+      { id: "distribution", label: "Distribution Method", type: "select", required: true,
+        options: ["", "Email", "Shared Link", "Internal Portal", "Print & Mail", "Fax", "Carrier Pigeon", "Telegram", "Smoke Signals"] },
+      { id: "distDate", label: "Distribution Date", type: "date" },
+      { id: "distList", label: "Distribution List (emails)", type: "textarea", placeholder: "One email per line...", rows: 3 }
+    ]
+  },
+  {
+    title: "Notifications",
+    fields: [
+      { id: "notifyCreate", label: "Notify on Creation?", type: "select", required: true, options: ["", "Yes", "No"] },
+      { id: "notifyView", label: "Notify When Viewed?", type: "select", required: true, options: ["", "Yes", "No", "Only on Full Moons"] },
+      { id: "notifyEdit", label: "Notify on Edits?", type: "select", required: true, options: ["", "Yes", "No", "Only if it's Bad"] },
+      { id: "notifyExpiry", label: "Notify Before Expiry?", type: "select", required: true, options: ["", "1 day before", "1 week before", "1 month before", "Never (surprise me)"] }
+    ]
+  },
+  {
+    title: "Metadata",
+    fields: [
+      { id: "version", label: "Initial Version", type: "text", required: true, placeholder: "e.g., 1.0.0" },
+      { id: "lifecycle", label: "Lifecycle Stage", type: "select", required: true,
+        options: ["", "Concept", "Draft", "In Review", "Approved", "Published", "Deprecated", "Zombie (won't die)"] },
+      { id: "expiryDate", label: "Expiry Date", type: "date" },
+      { id: "customMeta", label: "Custom Metadata (JSON)", type: "textarea", placeholder: '{"key": "value"}', rows: 3 }
+    ]
+  },
+  {
+    title: "Attachments & Links",
+    fields: [
+      { id: "attachments", label: "Attachment URLs (one per line)", type: "textarea", placeholder: "https://example.com/file.pdf", rows: 3 },
+      { id: "relatedDocs", label: "Related Document IDs", type: "text", placeholder: "e.g., DOC-001, DOC-002" },
+      { id: "externalLinks", label: "External References", type: "textarea", placeholder: "https://...", rows: 2 }
+    ]
+  },
+  {
+    title: "Final Review & Submit",
+    fields: [
+      { id: "_review", label: "", type: "review" },
+      { id: "confirmAccuracy", label: "I confirm all information is accurate and complete", type: "checkbox", required: true },
+      { id: "confirmPolicy", label: "I have reviewed and comply with the Document Management Policy (Section 7.3.2)", type: "checkbox", required: true },
+      { id: "confirmRetention", label: "I understand the retention and disposal requirements for this document type", type: "checkbox", required: true },
+      { id: "digitalSignature", label: "Digital Signature (type your full name)", type: "text", required: true, placeholder: "Type your full legal name as signature" }
+    ]
+  }
+];
+
+// ========== PAGE ROUTING ==========
+function showPage(page) {
+  document.querySelectorAll('[id^="page-"]').forEach(el => el.style.display = 'none');
+  const target = document.getElementById('page-' + page);
+  if (target) target.style.display = '';
+
+  if (page === 'dashboard' || page === 'create') {
+    if (!currentUser) { showPage('auth'); return; }
+    document.getElementById('navLoggedOut').style.display = 'none';
+    document.getElementById('navLoggedIn').style.display = '';
+    if (page === 'dashboard') {
+      document.getElementById('dashboardGreeting').textContent = 'Welcome back, ' + currentUser.first + '!';
+    }
+    if (page === 'create') { currentStep = 0; renderStepper(); renderStep(); }
+  } else {
+    document.getElementById('navLoggedOut').style.display = '';
+    document.getElementById('navLoggedIn').style.display = 'none';
+  }
+  window.scrollTo(0, 0);
+}
+
+// ========== AUTH ==========
+function switchAuthTab(tab) {
+  document.getElementById('loginForm').style.display = tab === 'login' ? '' : 'none';
+  document.getElementById('signupForm').style.display = tab === 'signup' ? '' : 'none';
+  document.getElementById('tabLogin').className = tab === 'login' ? 'active' : '';
+  document.getElementById('tabSignup').className = tab === 'signup' ? 'active' : '';
+}
+
+function doSignup() {
+  const first = document.getElementById('signupFirst').value.trim();
+  const last = document.getElementById('signupLast').value.trim();
+  const email = document.getElementById('signupEmail').value.trim();
+  const pw = document.getElementById('signupPassword').value;
+  const confirm = document.getElementById('signupConfirm').value;
+  const tos = document.getElementById('signupTos').checked;
+  const privacy = document.getElementById('signupPrivacy').checked;
+  const source = document.getElementById('signupSource').value;
+
+  if (!first || !last) { showToast('Please fill in your name'); return; }
+  if (!email || !email.includes('@')) { showToast('Please enter a valid email'); return; }
+  if (pw.length < 8) { showToast('Password must be at least 8 characters'); return; }
+  if (pw !== confirm) { showToast('Passwords do not match'); return; }
+  if (!source) { showToast('Please tell us how you heard about us (it\'s required, sorry)'); return; }
+  if (!tos) { showToast('You must agree to the Terms of Service'); return; }
+  if (!privacy) { showToast('You must agree to the Privacy Policy'); return; }
+
+  // Check if user already exists
+  const users = JSON.parse(localStorage.getItem('docuvault_users') || '{}');
+  if (users[email]) { showToast('An account with this email already exists. Try logging in!'); return; }
+
+  const user = { first, last, email, company: document.getElementById('signupCompany').value, role: document.getElementById('signupRole').value };
+  users[email] = { ...user, password: pw };
+  localStorage.setItem('docuvault_users', JSON.stringify(users));
+
+  currentUser = user;
+  localStorage.setItem('docuvault_user', JSON.stringify(user));
+  showToast('Account created! Welcome to DocuVault, ' + first + '!');
+  setTimeout(() => showPage('dashboard'), 500);
+}
+
+function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pw = document.getElementById('loginPassword').value;
+  const tos = document.getElementById('loginTos').checked;
+
+  if (!email) { showToast('Please enter your email'); return; }
+  if (!pw) { showToast('Please enter your password'); return; }
+  if (!tos) { showToast('You must agree to all five policies to log in'); return; }
+
+  const users = JSON.parse(localStorage.getItem('docuvault_users') || '{}');
+  const stored = users[email];
+  if (!stored) { showToast('No account found with this email. Create one first!'); return; }
+  if (stored.password !== pw) { showToast('Incorrect password. You have unlimited attempts, we believe in you.'); return; }
+
+  currentUser = { first: stored.first, last: stored.last, email: stored.email, company: stored.company };
+  localStorage.setItem('docuvault_user', JSON.stringify(currentUser));
+  showToast('Welcome back, ' + currentUser.first + '!');
+  setTimeout(() => showPage('dashboard'), 500);
+}
+
+function doLogout() {
+  currentUser = null;
+  localStorage.removeItem('docuvault_user');
+  showPage('home');
+  showToast('Logged out. We\'ll miss you. (For approximately 0 seconds.)');
+}
+
+// ========== MULTI-STEP FORM ==========
+function renderStepper() {
+  const el = document.getElementById('stepper');
+  el.innerHTML = steps.map((s, i) => {
+    const cls = i < currentStep ? 'done' : i === currentStep ? 'active' : '';
+    return (i > 0 ? '<div class="stepper-connector"></div>' : '') +
+      '<div class="stepper-step ' + cls + '"><div class="step-num">' + (i < currentStep ? '&#10003;' : (i + 1)) + '</div><div class="step-label">' + s.title + '</div></div>';
+  }).join('');
+}
+
+function renderStep() {
+  const step = steps[currentStep];
+  const c = document.getElementById('stepContainer');
+  let html = '<h3>' + step.title + '</h3><p style="color:var(--muted);font-size:13px;margin-bottom:20px">Step ' + (currentStep + 1) + ' of ' + steps.length + '</p>';
+
+  for (const f of step.fields) {
+    if (f.type === 'review') {
+      html += '<div style="margin-bottom:16px"><h4 style="margin-bottom:12px">Please review your submission:</h4>';
+      html += '<div style="background:var(--bg);border-radius:8px;padding:16px;font-size:13px;max-height:300px;overflow-y:auto">';
+      for (const [k, v] of Object.entries(formData)) {
+        if (v) {
+          const label = steps.flatMap(s => s.fields).find(ff => ff.id === k);
+          html += '<div style="margin-bottom:4px"><b>' + (label ? label.label : k) + ':</b> ' + escHtml(String(v)) + '</div>';
+        }
+      }
+      if (Object.keys(formData).filter(k => formData[k]).length === 0) {
+        html += '<p style="color:var(--muted)">No data entered yet.</p>';
+      }
+      html += '</div></div>';
+      continue;
+    }
+    if (f.type === 'checkbox') {
+      html += '<div class="checkbox-group"><input type="checkbox" id="field_' + f.id + '" ' + (formData[f.id] ? 'checked' : '') + '><label for="field_' + f.id + '">' + f.label + (f.required ? ' <span class="required">*</span>' : '') + '</label></div>';
+      continue;
+    }
+    const req = f.required ? ' <span class="required">*</span>' : '';
+    html += '<div class="form-group"><label>' + f.label + req + '</label>';
+    const val = formData[f.id] || '';
+    if (f.type === 'select') {
+      html += '<select id="field_' + f.id + '">' + f.options.map(o => '<option value="' + escHtml(o) + '"' + (val === o ? ' selected' : '') + '>' + (o || 'Select...') + '</option>').join('') + '</select>';
+    } else if (f.type === 'textarea') {
+      html += '<textarea id="field_' + f.id + '" rows="' + (f.rows || 3) + '" placeholder="' + (f.placeholder || '') + '">' + escHtml(val) + '</textarea>';
+    } else {
+      html += '<input type="' + f.type + '" id="field_' + f.id + '" value="' + escHtml(val) + '" placeholder="' + (f.placeholder || '') + '">';
+    }
+    if (f.hint) html += '<div class="hint">' + f.hint + '</div>';
+    html += '</div>';
+  }
+  c.innerHTML = html;
+
+  document.getElementById('btnPrev').style.display = currentStep > 0 ? '' : 'none';
+  const nextBtn = document.getElementById('btnNext');
+  if (currentStep === steps.length - 1) {
+    nextBtn.textContent = 'Submit Document';
+    nextBtn.className = 'btn btn-accent btn-lg';
+  } else {
+    nextBtn.textContent = 'Next Step \u2192';
+    nextBtn.className = 'btn btn-primary';
+  }
+}
+
+function saveCurrentFields() {
+  const step = steps[currentStep];
+  for (const f of step.fields) {
+    if (f.type === 'review') continue;
+    const el = document.getElementById('field_' + f.id);
+    if (!el) continue;
+    formData[f.id] = f.type === 'checkbox' ? el.checked : el.value;
+  }
+}
+
+function validateCurrentStep() {
+  const step = steps[currentStep];
+  for (const f of step.fields) {
+    if (!f.required || f.type === 'review') continue;
+    const val = formData[f.id];
+    if (f.type === 'checkbox') {
+      if (!val) { showToast('Please check: ' + f.label); return false; }
+    } else {
+      if (!val || !String(val).trim()) { showToast('Please fill in: ' + f.label); return false; }
+    }
+  }
+  return true;
+}
+
+function nextStep() {
+  saveCurrentFields();
+  if (!validateCurrentStep()) return;
+  if (currentStep === steps.length - 1) {
+    showToast('Document submitted successfully! (Just kidding, this is a demo. But the page-agent would have done all 15 steps for you.)');
+    return;
+  }
+  currentStep++;
+  renderStepper(); renderStep();
+  window.scrollTo(0, 0);
+}
+
+function prevStep() {
+  saveCurrentFields();
+  if (currentStep > 0) { currentStep--; renderStepper(); renderStep(); window.scrollTo(0, 0); }
+}
+
+// ========== UTILITIES ==========
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(hideToast, 4000);
+}
+function hideToast() { document.getElementById('toast').classList.remove('show'); }
+
+function toggleChat() {
+  document.getElementById('chatWindow').classList.toggle('open');
+}
+
+function closeNewsletter() {
+  document.getElementById('newsletterOverlay').classList.add('hidden');
+}
+
+// ========== COUNTDOWN TIMER ==========
+let countdownSec = 14 * 60 + 59;
+setInterval(() => {
+  if (countdownSec <= 0) countdownSec = 14 * 60 + 59;
+  countdownSec--;
+  const m = Math.floor(countdownSec / 60);
+  const s = countdownSec % 60;
+  const el = document.getElementById('countdown');
+  if (el) el.textContent = m + ':' + String(s).padStart(2, '0');
+}, 1000);
+
+// ========== INIT ==========
+(function init() {
+  // Show newsletter popup after 3 seconds
+  setTimeout(() => {
+    if (!localStorage.getItem('docuvault_newsletter_dismissed')) {
+      document.getElementById('newsletterOverlay').classList.remove('hidden');
+    }
+  }, 3000);
+
+  // Restore session
+  if (currentUser) {
+    showPage('dashboard');
+  } else {
+    showPage('home');
+  }
+
+  // Random toast notifications
+  const annoyingMessages = [
+    "Someone in your area just upgraded to Enterprise!",
+    "Your free trial has 47 days remaining (it always has 47 days remaining)",
+    "New feature: Dark mode! (Coming Q4 2029)",
+    "Did you know? DocuVault has over 3 satisfied customers!",
+    "Pro tip: You can close this notification by clicking the X",
+  ];
+  setInterval(() => {
+    if (Math.random() < 0.3) {
+      showToast(annoyingMessages[Math.floor(Math.random() * annoyingMessages.length)]);
+    }
+  }, 15000);
+})();
+</script>
+</body>
+</html>
