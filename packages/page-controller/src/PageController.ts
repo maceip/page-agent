@@ -177,11 +177,6 @@ export class PageController extends EventTarget {
 
 		this.lastTimeUpdate = Date.now()
 
-		// Temporarily bypass mask to allow DOM extraction
-		if (this.mask) {
-			this.mask.wrapper.style.pointerEvents = 'none'
-		}
-
 		dom.cleanUpHighlights()
 
 		const blacklist = [
@@ -204,11 +199,6 @@ export class PageController extends EventTarget {
 
 		// Mark as indexed - now element actions are allowed
 		this.isIndexed = true
-
-		// Restore mask blocking
-		if (this.mask) {
-			this.mask.wrapper.style.pointerEvents = 'auto'
-		}
 
 		this.dispatchEvent(new Event('afterUpdate'))
 

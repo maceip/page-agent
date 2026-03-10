@@ -19,7 +19,8 @@ export async function movePointerToElement(element: HTMLElement) {
 
 	window.dispatchEvent(new CustomEvent('PageAgent::MovePointerTo', { detail: { x, y } }))
 
-	await waitFor(0.3)
+	// Reduced from 300ms — cursor animation is fast enough now
+	await waitFor(0.1)
 }
 
 /**
@@ -59,16 +60,18 @@ function blurLastClickedElement() {
 }
 
 /**
- * Simulate a click on the element
+ * Simulate a click on the element.
+ * Optimized: cursor visual + DOM events fire in parallel to reduce perceived latency.
  */
 export async function clickElement(element: HTMLElement) {
 	blurLastClickedElement()
 
 	lastClickedElement = element
 	await scrollIntoViewIfNeeded(element)
-	await movePointerToElement(element)
+
+	// Fire cursor move and don't wait for full animation — dispatch click events immediately
+	movePointerToElement(element) // intentionally not awaited for visual overlap
 	window.dispatchEvent(new CustomEvent('PageAgent::ClickPointer'))
-	await waitFor(0.1)
 
 	// hover it
 	element.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true }))
@@ -83,10 +86,8 @@ export async function clickElement(element: HTMLElement) {
 	element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
 	element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
 
-	// dispatch a click event
-	// element.click()
-
-	await waitFor(0.2) // Wait to ensure click event processing completes
+	// Reduced from 200ms — just enough for click handlers to process
+	await waitFor(0.08)
 }
 
 // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -123,7 +124,7 @@ export async function inputTextElement(element: HTMLElement, text: string) {
 
 	element.dispatchEvent(new Event('input', { bubbles: true }))
 
-	await waitFor(0.1)
+	await waitFor(0.05)
 
 	blurLastClickedElement()
 }
@@ -146,18 +147,16 @@ export async function selectOptionElement(selectElement: HTMLSelectElement, opti
 	selectElement.value = option.value
 	selectElement.dispatchEvent(new Event('change', { bubbles: true }))
 
-	await waitFor(0.1) // Wait to ensure change event processing completes
+	await waitFor(0.05)
 }
 
 export async function scrollIntoViewIfNeeded(element: HTMLElement) {
 	const el = element as any
 	if (el.scrollIntoViewIfNeeded) {
 		el.scrollIntoViewIfNeeded()
-		// await waitFor(0.5) // Animation playback
 	} else {
 		// @todo visibility check
 		el.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' })
-		// await waitFor(0.5) // Animation playback
 	}
 }
 
@@ -251,41 +250,41 @@ export async function scrollVertically(
 
 		if (Math.abs(scrolled) < 1) {
 			return dy > 0
-				? `⚠️ Already at the bottom of the page, cannot scroll down further.`
-				: `⚠️ Already at the top of the page, cannot scroll up further.`
+				? `Already at the bottom of the page, cannot scroll down further.`
+				: `Already at the top of the page, cannot scroll up further.`
 		}
 
 		const reachedBottom = dy > 0 && scrollAfter >= scrollMax - 1
 		const reachedTop = dy < 0 && scrollAfter <= 1
 
-		if (reachedBottom) return `✅ Scrolled page by ${scrolled}px. Reached the bottom of the page.`
-		if (reachedTop) return `✅ Scrolled page by ${scrolled}px. Reached the top of the page.`
-		return `✅ Scrolled page by ${scrolled}px.`
+		if (reachedBottom) return `Scrolled page by ${scrolled}px. Reached the bottom of the page.`
+		if (reachedTop) return `Scrolled page by ${scrolled}px. Reached the top of the page.`
+		return `Scrolled page by ${scrolled}px.`
 	} else {
 		// Container scroll
 		const scrollBefore = el!.scrollTop
 		const scrollMax = el!.scrollHeight - el!.clientHeight
 
 		el!.scrollBy({ top: dy, behavior: 'smooth' })
-		await waitFor(0.1)
+		await waitFor(0.05)
 
 		const scrollAfter = el!.scrollTop
 		const scrolled = scrollAfter - scrollBefore
 
 		if (Math.abs(scrolled) < 1) {
 			return dy > 0
-				? `⚠️ Already at the bottom of container (${el!.tagName}), cannot scroll down further.`
-				: `⚠️ Already at the top of container (${el!.tagName}), cannot scroll up further.`
+				? `Already at the bottom of container (${el!.tagName}), cannot scroll down further.`
+				: `Already at the top of container (${el!.tagName}), cannot scroll up further.`
 		}
 
 		const reachedBottom = dy > 0 && scrollAfter >= scrollMax - 1
 		const reachedTop = dy < 0 && scrollAfter <= 1
 
 		if (reachedBottom)
-			return `✅ Scrolled container (${el!.tagName}) by ${scrolled}px. Reached the bottom.`
+			return `Scrolled container (${el!.tagName}) by ${scrolled}px. Reached the bottom.`
 		if (reachedTop)
-			return `✅ Scrolled container (${el!.tagName}) by ${scrolled}px. Reached the top.`
-		return `✅ Scrolled container (${el!.tagName}) by ${scrolled}px.`
+			return `Scrolled container (${el!.tagName}) by ${scrolled}px. Reached the top.`
+		return `Scrolled container (${el!.tagName}) by ${scrolled}px.`
 	}
 }
 
@@ -379,41 +378,41 @@ export async function scrollHorizontally(
 
 		if (Math.abs(scrolled) < 1) {
 			return dx > 0
-				? `⚠️ Already at the right edge of the page, cannot scroll right further.`
-				: `⚠️ Already at the left edge of the page, cannot scroll left further.`
+				? `Already at the right edge of the page, cannot scroll right further.`
+				: `Already at the left edge of the page, cannot scroll left further.`
 		}
 
 		const reachedRight = dx > 0 && scrollAfter >= scrollMax - 1
 		const reachedLeft = dx < 0 && scrollAfter <= 1
 
 		if (reachedRight)
-			return `✅ Scrolled page by ${scrolled}px. Reached the right edge of the page.`
-		if (reachedLeft) return `✅ Scrolled page by ${scrolled}px. Reached the left edge of the page.`
-		return `✅ Scrolled page horizontally by ${scrolled}px.`
+			return `Scrolled page by ${scrolled}px. Reached the right edge of the page.`
+		if (reachedLeft) return `Scrolled page by ${scrolled}px. Reached the left edge of the page.`
+		return `Scrolled page horizontally by ${scrolled}px.`
 	} else {
 		// Container scroll
 		const scrollBefore = el!.scrollLeft
 		const scrollMax = el!.scrollWidth - el!.clientWidth
 
 		el!.scrollBy({ left: dx, behavior: 'smooth' })
-		await waitFor(0.1)
+		await waitFor(0.05)
 
 		const scrollAfter = el!.scrollLeft
 		const scrolled = scrollAfter - scrollBefore
 
 		if (Math.abs(scrolled) < 1) {
 			return dx > 0
-				? `⚠️ Already at the right edge of container (${el!.tagName}), cannot scroll right further.`
-				: `⚠️ Already at the left edge of container (${el!.tagName}), cannot scroll left further.`
+				? `Already at the right edge of container (${el!.tagName}), cannot scroll right further.`
+				: `Already at the left edge of container (${el!.tagName}), cannot scroll left further.`
 		}
 
 		const reachedRight = dx > 0 && scrollAfter >= scrollMax - 1
 		const reachedLeft = dx < 0 && scrollAfter <= 1
 
 		if (reachedRight)
-			return `✅ Scrolled container (${el!.tagName}) by ${scrolled}px. Reached the right edge.`
+			return `Scrolled container (${el!.tagName}) by ${scrolled}px. Reached the right edge.`
 		if (reachedLeft)
-			return `✅ Scrolled container (${el!.tagName}) by ${scrolled}px. Reached the left edge.`
-		return `✅ Scrolled container (${el!.tagName}) horizontally by ${scrolled}px.`
+			return `Scrolled container (${el!.tagName}) by ${scrolled}px. Reached the left edge.`
+		return `Scrolled container (${el!.tagName}) horizontally by ${scrolled}px.`
 	}
 }

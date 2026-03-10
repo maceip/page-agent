@@ -5,6 +5,14 @@ import type { AgentActivity, PanelAgentAdapter } from './types'
 
 import styles from './Panel.module.css'
 
+/** Available hotpoint positions */
+type HotpointPosition =
+	| 'bottom-center'
+	| 'bottom-right'
+	| 'bottom-left'
+	| 'top-right'
+	| 'top-left'
+
 /**
  * Panel configuration
  */
@@ -15,6 +23,11 @@ export interface PanelConfig {
 	 * @default true
 	 */
 	promptForNextTask?: boolean
+	/**
+	 * Initial hotpoint position for the panel
+	 * @default 'bottom-right'
+	 */
+	position?: HotpointPosition
 }
 
 /**
@@ -23,6 +36,7 @@ export interface PanelConfig {
  * Architecture:
  * - History list: renders directly from agent.history (historical events)
  * - Header bar: shows activity events (transient state) and agent status
+ * - Hotpoint system: panel snaps to screen corners/edges
  *
  * This separation ensures data consistency - history is the single source of truth
  * for what has been done, while activity shows what is happening now.
@@ -47,6 +61,16 @@ export class Panel {
 	#pendingHeaderText: string | null = null
 	#isAnimating = false
 
+	/** Current hotpoint position */
+	#position: HotpointPosition
+
+	/** Drag state */
+	#isDragging = false
+	#dragStartX = 0
+	#dragStartY = 0
+	#dragOffsetX = 0
+	#dragOffsetY = 0
+
 	// Event handlers (bound for removal)
 	#onStatusChange = () => this.#handleStatusChange()
 	#onHistoryChange = () => this.#handleHistoryChange()
@@ -66,6 +90,7 @@ export class Panel {
 		this.#agent = agent
 		this.#config = config
 		this.#i18n = new I18n(config.language ?? 'en-US')
+		this.#position = config.position ?? 'bottom-right'
 
 		// Set up askUser callback on agent
 		this.#agent.onAskUser = (question) => this.#askUser(question)
@@ -91,7 +116,63 @@ export class Panel {
 
 		this.#showInputArea()
 
+		// Apply initial position
+		this.#applyPosition()
+
 		this.hide() // Start hidden
+	}
+
+	// ========== Hotpoint system ==========
+
+	#applyPosition(): void {
+		// Remove all position classes
+		const positions: HotpointPosition[] = [
+			'bottom-center',
+			'bottom-right',
+			'bottom-left',
+			'top-right',
+			'top-left',
+		]
+		for (const pos of positions) {
+			this.#wrapper.classList.remove(styles[`pos-${pos}` as keyof typeof styles] as string)
+		}
+
+		// Construct the CSS module class key
+		const classKey = `pos-${this.#position}` as string
+		// CSS modules use camelCase for hyphenated class names
+		const camelKey = classKey.replace(/-([a-z])/g, (_, c) => c.toUpperCase())
+		const className = (styles as Record<string, string>)[camelKey]
+		if (className) {
+			this.#wrapper.classList.add(className)
+		}
+
+		// Clear any inline positioning from drag
+		this.#wrapper.style.left = ''
+		this.#wrapper.style.top = ''
+		this.#wrapper.style.right = ''
+		this.#wrapper.style.bottom = ''
+	}
+
+	/** Snap to the nearest hotpoint based on current screen position */
+	#snapToNearestHotpoint(screenX: number, screenY: number): void {
+		const vw = window.innerWidth
+		const vh = window.innerHeight
+
+		const isTop = screenY < vh / 2
+		const isLeft = screenX < vw / 3
+		const isRight = screenX > (vw * 2) / 3
+
+		let newPos: HotpointPosition
+		if (isTop) {
+			newPos = isLeft ? 'top-left' : 'top-right'
+		} else {
+			if (isLeft) newPos = 'bottom-left'
+			else if (isRight) newPos = 'bottom-right'
+			else newPos = 'bottom-center'
+		}
+
+		this.#position = newPos
+		this.#applyPosition()
 	}
 
 	// ========== Agent event handlers ==========
@@ -105,9 +186,9 @@ export class Panel {
 			status === 'running' ? 'thinking' : status === 'idle' ? 'thinking' : status
 		this.#updateStatusIndicator(indicatorType)
 
-		// Morph action button: running = stop (■), not running = close (X)
+		// Morph action button: running = stop, not running = close (X)
 		if (status === 'running') {
-			this.#actionButton.textContent = '■'
+			this.#actionButton.textContent = '\u25A0'
 			this.#actionButton.title = this.#i18n.t('ui.panel.stop')
 		} else {
 			this.#actionButton.textContent = 'X'
@@ -185,7 +266,7 @@ export class Panel {
 			// Add temporary question card so user can see the full question
 			const tempCard = document.createElement('div')
 			tempCard.innerHTML = createCard({
-				icon: '❓',
+				icon: '\u2753',
 				content: `Question: ${question}`,
 				type: 'question',
 			})
@@ -201,15 +282,15 @@ export class Panel {
 	// ========== Public control methods ==========
 
 	show(): void {
+		this.wrapper.classList.remove(styles.hiding as string)
 		this.wrapper.style.display = 'block'
 		void this.wrapper.offsetHeight
 		this.wrapper.style.opacity = '1'
-		this.wrapper.style.transform = 'translateX(-50%) translateY(0)'
 	}
 
 	hide(): void {
 		this.wrapper.style.opacity = '0'
-		this.wrapper.style.transform = 'translateX(-50%) translateY(20px)'
+		this.wrapper.classList.add(styles.hiding as string)
 		this.wrapper.style.display = 'none'
 	}
 
@@ -403,9 +484,9 @@ export class Panel {
 			</div>
 			<div class="${styles.inputSectionWrapper} ${styles.hidden}">
 				<div class="${styles.inputSection}">
-					<input 
-						type="text" 
-						class="${styles.taskInput}" 
+					<input
+						type="text"
+						class="${styles.taskInput}"
 						maxlength="200"
 					/>
 				</div>
@@ -419,13 +500,74 @@ export class Panel {
 	#setupEventListeners(): void {
 		// Click header area to expand/collapse
 		const header = this.wrapper.querySelector(`.${styles.header}`)!
-		header.addEventListener('click', (e) => {
-			// Don't trigger expand/collapse if clicking on buttons
-			if ((e.target as HTMLElement).closest(`.${styles.controlButton}`)) {
-				return
+
+		// --- Drag-to-hotpoint logic ---
+		let dragStartTime = 0
+
+		const onPointerDown = (e: PointerEvent) => {
+			// Don't drag from buttons
+			if ((e.target as HTMLElement).closest(`.${styles.controlButton}`)) return
+
+			this.#isDragging = false
+			dragStartTime = Date.now()
+			this.#dragStartX = e.clientX
+			this.#dragStartY = e.clientY
+
+			const rect = this.#wrapper.getBoundingClientRect()
+			this.#dragOffsetX = e.clientX - rect.left
+			this.#dragOffsetY = e.clientY - rect.top
+
+			header.addEventListener('pointermove', onPointerMove)
+			window.addEventListener('pointerup', onPointerUp)
+		}
+
+		const onPointerMove = (e: PointerEvent) => {
+			const dx = Math.abs(e.clientX - this.#dragStartX)
+			const dy = Math.abs(e.clientY - this.#dragStartY)
+
+			if (!this.#isDragging && (dx > 5 || dy > 5)) {
+				this.#isDragging = true
+				this.#wrapper.classList.add(styles.dragging)
+
+				// Switch to absolute positioning
+				const rect = this.#wrapper.getBoundingClientRect()
+				this.#wrapper.style.position = 'fixed'
+				this.#wrapper.style.left = `${rect.left}px`
+				this.#wrapper.style.top = `${rect.top}px`
+				this.#wrapper.style.right = 'auto'
+				this.#wrapper.style.bottom = 'auto'
+				this.#wrapper.style.transform = 'none'
 			}
-			this.#toggle()
-		})
+
+			if (this.#isDragging) {
+				this.#wrapper.style.left = `${e.clientX - this.#dragOffsetX}px`
+				this.#wrapper.style.top = `${e.clientY - this.#dragOffsetY}px`
+			}
+		}
+
+		const onPointerUp = (e: PointerEvent) => {
+			header.removeEventListener('pointermove', onPointerMove)
+			window.removeEventListener('pointerup', onPointerUp)
+
+			if (this.#isDragging) {
+				this.#isDragging = false
+				this.#wrapper.classList.remove(styles.dragging)
+
+				// Snap to nearest hotpoint
+				const rect = this.#wrapper.getBoundingClientRect()
+				const centerX = rect.left + rect.width / 2
+				const centerY = rect.top + rect.height / 2
+				this.#snapToNearestHotpoint(centerX, centerY)
+			} else {
+				// It was a click, not a drag — toggle expand
+				const elapsed = Date.now() - dragStartTime
+				if (elapsed < 300) {
+					this.#toggle()
+				}
+			}
+		}
+
+		header.addEventListener('pointerdown', onPointerDown as EventListener)
 
 		// Expand button
 		this.#expandButton.addEventListener('click', (e) => {
@@ -465,23 +607,23 @@ export class Panel {
 	#expand(): void {
 		this.#isExpanded = true
 		this.wrapper.classList.add(styles.expanded)
-		this.#expandButton.textContent = '▲'
+		this.#expandButton.textContent = '\u25B2'
 	}
 
 	#collapse(): void {
 		this.#isExpanded = false
 		this.wrapper.classList.remove(styles.expanded)
-		this.#expandButton.textContent = '▼'
+		this.#expandButton.textContent = '\u25BC'
 	}
 
 	/**
 	 * Start periodic header update loop
 	 */
 	#startHeaderUpdateLoop(): void {
-		// Check every 450ms (same as total animation duration)
+		// Check every 350ms (faster than before for snappier updates)
 		this.#headerUpdateTimer = setInterval(() => {
 			this.#checkAndUpdateHeader()
-		}, 450)
+		}, 350)
 	}
 
 	/**
@@ -535,8 +677,8 @@ export class Panel {
 			setTimeout(() => {
 				this.#statusText.classList.remove(styles.fadeIn)
 				this.#isAnimating = false
-			}, 300)
-		}, 150) // Half the duration of fade out animation
+			}, 200)
+		}, 100) // Faster transition
 	}
 
 	#updateStatusIndicator(

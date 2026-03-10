@@ -1,25 +1,46 @@
-/* AI 光标样式 */
+/* Agent cursor - distinct from user's system cursor */
 .cursor {
-	position: absolute;
-	width: var(--cursor-size, 75px);
-	height: var(--cursor-size, 75px);
+	position: fixed;
+	width: var(--cursor-size, 48px);
+	height: var(--cursor-size, 48px);
 	pointer-events: none;
-	z-index: 10000;
+	z-index: 2147483645;
+	transition: opacity 0.2s ease;
+}
+
+/* Agent label badge */
+.cursorLabel {
+	position: absolute;
+	top: -6px;
+	left: 28px;
+	background: linear-gradient(135deg, #6366f1, #a855f7);
+	color: #fff;
+	font-size: 9px;
+	font-weight: 700;
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+	padding: 1px 5px;
+	border-radius: 6px;
+	line-height: 14px;
+	letter-spacing: 0.5px;
+	white-space: nowrap;
+	box-shadow: 0 1px 4px rgba(99, 102, 241, 0.5);
+	pointer-events: none;
+	opacity: 0.9;
 }
 
 .cursorBorder {
 	position: absolute;
 	width: 100%;
 	height: 100%;
-	background: linear-gradient(45deg, rgb(57, 182, 255), rgb(189, 69, 251));
+	background: linear-gradient(135deg, #818cf8, #c084fc);
 	mask-image: url(./cursor-border.svg);
 	mask-size: 100% 100%;
 	mask-repeat: no-repeat;
 
 	transform-origin: center;
-	transform: rotate(-135deg) scale(1.2);
-	margin-left: -10px;
-	margin-top: -18px;
+	transform: rotate(-135deg) scale(1.15);
+	margin-left: -8px;
+	margin-top: -14px;
 }
 
 .cursorFilling {
@@ -31,9 +52,23 @@
 	background-repeat: no-repeat;
 
 	transform-origin: center;
-	transform: rotate(-135deg) scale(1.2);
-	margin-left: -10px;
-	margin-top: -18px;
+	transform: rotate(-135deg) scale(1.15);
+	margin-left: -8px;
+	margin-top: -14px;
+}
+
+/* Glow trail behind the cursor */
+.cursorGlow {
+	position: absolute;
+	width: 32px;
+	height: 32px;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	border-radius: 50%;
+	background: radial-gradient(circle, rgba(99, 102, 241, 0.35) 0%, transparent 70%);
+	pointer-events: none;
+	filter: blur(6px);
 }
 
 .cursorRipple {
@@ -49,13 +84,13 @@
 		opacity: 0;
 		position: absolute;
 		inset: 0;
-		border: 4px solid rgba(57, 182, 255, 1);
+		border: 3px solid rgba(99, 102, 241, 0.8);
 		border-radius: 50%;
 	}
 }
 
 .cursor.clicking .cursorRipple::after {
-	animation: cursor-ripple 300ms ease-out forwards;
+	animation: cursor-ripple 250ms ease-out forwards;
 }
 
 @keyframes cursor-ripple {
@@ -64,7 +99,23 @@
 		opacity: 1;
 	}
 	100% {
-		transform: scale(2);
+		transform: scale(2.5);
 		opacity: 0;
+	}
+}
+
+/* Idle breathing animation */
+.cursor.idle .cursorGlow {
+	animation: cursor-breathe 2s ease-in-out infinite;
+}
+
+@keyframes cursor-breathe {
+	0%, 100% {
+		opacity: 0.4;
+		transform: translate(-50%, -50%) scale(1);
+	}
+	50% {
+		opacity: 0.7;
+		transform: translate(-50%, -50%) scale(1.3);
 	}
 }
