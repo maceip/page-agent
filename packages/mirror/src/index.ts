@@ -39,6 +39,7 @@ export type {
 	MirrorEvent,
 	MirrorLayerSyncEvent,
 	MirrorNavigationInterceptEvent,
+	MirrorSessionContext,
 	MirrorSessionId,
 	MirrorSessionStatus,
 	MirrorState,
@@ -99,6 +100,7 @@ export type {
 
 // -- Cloud Agent API --------------------------------------------------------
 export type { CloudAgentClientConfig, ICloudAgentClient } from './cloud-agent/client'
+export { CloudAgentClient, createCloudAgentClient } from './cloud-agent/CloudAgentClient'
 
 export type {
 	ApiKeyInfo,
@@ -131,5 +133,7 @@ export { MirrorSession } from './MirrorSession'
 export type {
 	CreateMirrorController,
 	IMirrorController,
+	MirrorControllerDependencies,
 	MirrorControllerConfig,
 } from './MirrorController'
+export { MirrorController, createMirrorController } from './MirrorController'
