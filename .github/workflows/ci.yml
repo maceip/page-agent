@@ -48,7 +48,7 @@ jobs:
         run: npm ci
 
       - name: Typecheck
-        run: npx tsc --build --noEmit
+        run: npx tsc --build tsconfig.typecheck.json
 
   test:
     runs-on: ubuntu-latest

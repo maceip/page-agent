@@ -97,12 +97,13 @@ export function handleTabControlMessage(
 
 		case 'create_tab_group': {
 			debug('create_tab_group', payload)
+			const args = payload as { tabIds: number[]; windowId: number | null }
+			const tabIds =
+				args.tabIds.length === 1 ? args.tabIds[0] : (args.tabIds as [number, ...number[]])
 			chrome.tabs
 				.group({
-					tabIds: (payload as { tabIds: number[] }).tabIds,
-					createProperties: {
-						windowId: (payload as { windowId: number | null }).windowId ?? undefined,
-					},
+					tabIds,
+					createProperties: { windowId: args.windowId ?? undefined },
 				})
 				.then((groupId) => {
 					debug('create_tab_group: success', groupId)

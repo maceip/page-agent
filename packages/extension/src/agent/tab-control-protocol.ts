@@ -39,7 +39,7 @@ export interface TabControlRemoteMethods {
 				groupId: number
 				properties: {
 					title: string
-					color: chrome.tabGroups.ColorEnum
+					color: chrome.tabGroups.Color
 					collapsed: boolean
 				}
 			},
@@ -79,6 +79,7 @@ const TAB_CONTROL_PAYLOAD_VALIDATORS: Record<TabControlAction, (payload: unknown
 	create_tab_group: (payload) =>
 		isRecord(payload) &&
 		Array.isArray(payload.tabIds) &&
+		payload.tabIds.length > 0 &&
 		payload.tabIds.every((id) => typeof id === 'number') &&
 		(typeof payload.windowId === 'number' || payload.windowId === null),
 	update_tab_group: (payload) =>

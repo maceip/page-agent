@@ -148,7 +148,7 @@ export class TabsController extends EventTarget {
 				groupId: this.tabGroupId,
 				properties: {
 					title: `PageAgent(${this.task})`,
-					color: randomColor(),
+					color: randomColor() as chrome.tabGroups.Color,
 					collapsed: false,
 				},
 			})
