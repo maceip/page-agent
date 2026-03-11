@@ -102,6 +102,12 @@ To run both suites in one pass:
 npm run demo:e2e:all
 ```
 
+Mirror performance budgets (p95 latency guards):
+
+```bash
+npm run test:perf:mirror
+```
+
 ## 🤝 Contributing
 
 We welcome contributions from the community! Follow our instructions in [CONTRIBUTING.md](CONTRIBUTING.md) for environment setup and local development.

@@ -1,119 +1,113 @@
-# Mirror Module Integration Guide
+# Mirror Runtime Integration Guide
 
-After merging the `IPageController` interface changes on main, the mirror branch
-(`claude/add-page-agent-mirror-7Y9Yu`) needs the following adjustments.
+_Last updated: 2026-03-11_
 
-## 1. RemotePageController must implement IPageController
+## Overview
 
-```diff
-- import type { IHotLayer, RemoteInputEvent } from './layers/hot'
-+ import type { ActionResult, BrowserState, IPageController } from '@page-agent/page-controller'
-+ import type { IHotLayer, RemoteInputEvent } from './layers/hot'
+Mirror now has a concrete runtime path:
 
-- // local re-declarations of BrowserState and ActionResult
-- interface BrowserState { ... }
-- interface ActionResult { ... }
+- `createMirrorController(config)` returns an operational controller.
+- `MirrorController` orchestrates cold/warm/hot layers.
+- `CloudAgentClient` manages cloud agent lifecycle and follow-ups.
+- `MirrorSession` wires hot-layer snapshots to `RemotePageController`.
 
-- export class RemotePageController extends EventTarget {
-+ export class RemotePageController extends EventTarget implements IPageController {
-```
-
-Delete the locally-declared `BrowserState` and `ActionResult` interfaces from
-`packages/mirror/src/RemotePageController.ts`. Import them from
-`@page-agent/page-controller` instead. This eliminates the duplicate type
-definitions that will inevitably drift.
-
-## 2. Add missing IPageController methods
-
-Mirror's `RemotePageController` is missing `getCurrentUrl()` (public) — it has it
-as a private implementation detail reading from `this.snapshot?.url`. Make it public:
+## Minimal integration
 
 ```ts
-async getCurrentUrl(): Promise<string> {
-    return this.snapshot?.url ?? ''
-}
-```
+import { createMirrorController } from '@page-agent/mirror'
 
-## 3. updateTree() return type
-
-The interface requires `updateTree(): Promise<string>`. Mirror's version already
-returns `Promise<string>` — no change needed.
-
-## 4. Fix RemoteInputEvent construction — eliminate `as RemoteInputEvent` casts
-
-Instead of:
-```ts
-await this.hotLayer.sendInputEvent({
-    type: 'focus',
-    elementId: index,
-    timestamp: this.now(),
-} as RemoteInputEvent)
-```
-
-Create properly narrowed objects that TypeScript can verify:
-```ts
-const focusEvent: RemoteFocusEvent = {
-    type: 'focus',
-    elementId: index,
-    timestamp: this.now(),
-}
-await this.hotLayer.sendInputEvent(focusEvent)
-```
-
-Or add factory helpers in the hot layer types:
-```ts
-export function createInputEvent<T extends RemoteInputEvent['type']>(
-    type: T,
-    payload: Omit<Extract<RemoteInputEvent, { type: T }>, 'type'>
-): Extract<RemoteInputEvent, { type: T }> {
-    return { type, ...payload } as Extract<RemoteInputEvent, { type: T }>
-}
-```
-
-## 5. MirrorSession integration — no more `as any`
-
-Before:
-```ts
-const core = new PageAgentCore({
-    pageController: session.controller as any,
-    ...agentConfig,
+const mirror = createMirrorController({
+  apiKey: process.env.CLOUD_AGENT_KEY!,
+  repository: 'https://github.com/your-org/your-repo',
+  remoteCdpUrl: 'ws://remote-browser:9222/devtools/browser/<id>',
+  quic: { remoteEndpoint: 'quic://mirror.example.com:4433' },
+  context: {
+    userSessionId: 'user-123',
+    pageId: 'tab-7',
+    origin: 'https://app.example.com',
+  },
+  dependencies: {
+    coldLayer,
+    warmLayer,
+    hotLayer,
+    // optional: cloudClient
+  },
 })
-```
 
-After (once RemotePageController implements IPageController):
-```ts
-const core = new PageAgentCore({
-    pageController: session.controller,
-    ...agentConfig,
+const { sessionId } = await mirror.startSession()
+const state = await mirror.getRemoteBrowserState()
+await mirror.sendInputToRemote({
+  type: 'navigate',
+  url: 'https://app.example.com/dashboard',
+  timestamp: new Date().toISOString(),
 })
+await mirror.endSession()
 ```
 
-## 6. getPageInstructions is now async
+## Required dependencies
 
-The `getPageInstructions` callback signature changed from:
-```ts
-(url: string) => string | undefined | null
+`MirrorController` requires concrete layer dependencies:
+
+- `IColdLayer` (profile/bootstrap lifecycle)
+- `IWarmLayer` (auth/cookie/session replication)
+- `IHotLayer` (input dispatch + micro-DOM observation)
+
+If `cloudClient` is not supplied, the controller creates one using `apiKey` and
+`apiBaseUrl`.
+
+## Session identity context
+
+Set `context` in `MirrorConfig` to keep identity explicit across layers:
+
+- `userSessionId`
+- `pageId`
+- `origin`
+
+This context is surfaced in `MirrorState.context` and should be treated as immutable
+for a session.
+
+## Event model
+
+Use `onEvent()` to observe lifecycle and quality:
+
+- `mirror:status-change`
+- `mirror:layer-sync`
+- `mirror:error`
+- `mirror:cloud-agent`
+- `mirror:navigation-intercept`
+- `mirror:visual-handoff`
+
+For hot-path interactions:
+
+- `onRemoteFrame()`
+- `onSpatialMapUpdate()`
+- `onNavigationIntercept()`
+
+## Performance-sensitive behavior
+
+- `MirrorSession` now applies diffs incrementally and only rebuilds full HTML on
+  large patch thresholds.
+- `RemotePageController.updateTree()` only consumes strictly newer snapshots
+  (`seq > current`), preventing stale rollback.
+
+## Demo and verification
+
+The mirror E2E demo now exercises the runtime controller path:
+
+```bash
+npm run demo:e2e:mirror
 ```
-to:
-```ts
-(url: string) => string | Promise<string | undefined | null> | undefined | null
-```
 
-Any mirror-specific page instructions can now be async (e.g., fetching context
-from the warm layer's credential state or the hot layer's remote browser state).
+This command:
 
-## 7. Architecture: Two browsers, one interface
+1. builds page-controller, llms, core, mirror packages,
+2. runs a two-browser Puppeteer scenario,
+3. drives remote actions through `MirrorController` APIs,
+4. validates phase-2 transfer behavior.
 
-The grand design is two browsers running in tandem — local and remote — each
-with their own `IPageController`. The mirror layer synchronizes state between
-them. When building mirror features:
+## Safety and failure behavior
 
-- The **local** browser uses `PageController` (the concrete class, content script)
-- The **remote** browser uses `RemotePageController` (mirror's adapter over IHotLayer)
-- `PageAgentCore` talks to whichever one it's given via `IPageController`
-- `IMirrorController` orchestrates the relationship between the two
-
-This means the remote cloud browser should eventually have the same content-script
-infrastructure as the local one — a real `PageController` running in its DOM,
-with the hot layer streaming its spatial maps back. The mirror's
-`RemotePageController` is the local-side proxy for that remote `PageController`.
+- `startSession()` transitions state: `initializing → cold-syncing → warm-syncing → live`.
+- Any initialization failure emits `mirror:error`, transitions to `error`, and cleans up layers.
+- `endSession()` tears down layers in deterministic order and handles cloud-agent stop/delete.
+- `dispose()` is idempotent.

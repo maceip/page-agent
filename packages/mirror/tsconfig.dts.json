@@ -1,6 +1,10 @@
 {
     "extends": "./tsconfig.json",
     "compilerOptions": {
-        "paths": {}
+        "paths": {
+            "@page-agent/core": ["../core/dist/src/PageAgentCore.d.ts"],
+            "@page-agent/page-controller": ["../page-controller/dist/src/PageController.d.ts"],
+            "@page-agent/llms": ["../llms/dist/src/index.d.ts"]
+        }
     }
 }
