@@ -11,7 +11,7 @@
  * This test is for CI/pre-commit use ONLY and is NOT part of page-agent itself.
  */
 import { execSync } from 'child_process'
-import { readFileSync, existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { describe, expect, it } from 'vitest'
 
 /**
@@ -169,9 +169,7 @@ describe('Secret Scanning (Pre-Commit)', () => {
 					if (pattern.test(line)) {
 						// Extract a safe snippet (mask most of the match)
 						const match = pattern.exec(line)
-						const snippet = match
-							? match[0].substring(0, 10) + '...[REDACTED]'
-							: '[REDACTED]'
+						const snippet = match ? match[0].substring(0, 10) + '...[REDACTED]' : '[REDACTED]'
 
 						violations.push({
 							file: filePath,

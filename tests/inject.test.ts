@@ -7,7 +7,7 @@
  * 3. Disposed and re-created without leaking state
  * 4. Used with the Chrome Built-in AI mock
  */
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PageAgent } from '../packages/page-agent/src/PageAgent'
 import { installMockChromeAI } from './setup'
@@ -103,8 +103,8 @@ describe('PageAgent Injectability', () => {
 		await expect(agent.execute('')).rejects.toThrow('Task is required')
 	})
 
-	it('should support custom tools', () => {
-		const { z } = require('zod/v4')
+	it('should support custom tools', async () => {
+		const { z } = await import('zod/v4')
 		agent = new PageAgent({
 			model: 'test-model',
 			baseURL: 'http://localhost:0',
@@ -246,9 +246,7 @@ describe('Chrome Built-in AI Mock', () => {
 
 	it('should support custom response patterns', () => {
 		const cleanup = installMockChromeAI({
-			responses: new Map([
-				[/hello/i, '{"greeting": "world"}'],
-			]),
+			responses: new Map([[/hello/i, '{"greeting": "world"}']]),
 		})
 
 		// Test would use the custom mock here
