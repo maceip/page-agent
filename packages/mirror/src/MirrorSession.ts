@@ -52,6 +52,8 @@ export class MirrorSession {
 	private hotLayer: IHotLayer
 	private unsubSpatial: (() => void) | null = null
 	private currentSnapshot: MicroDOMSnapshot | null = null
+	private htmlLineById = new Map<number, string>()
+	private htmlOrder: number[] = []
 	private started = false
 	private disposed = false
 
@@ -74,6 +76,7 @@ export class MirrorSession {
 		const existing = this.hotLayer.getLatestSnapshot()
 		if (existing) {
 			this.currentSnapshot = existing
+			this.seedHtmlCache(existing.elements)
 			this.controller.applySnapshot(existing)
 		}
 
@@ -85,6 +88,7 @@ export class MirrorSession {
 
 			if (isSnapshot(update)) {
 				this.currentSnapshot = update
+				this.seedHtmlCache(update.elements)
 				this.controller.applySnapshot(update)
 			} else {
 				// Materialize diff into a full snapshot
@@ -121,7 +125,44 @@ export class MirrorSession {
 		}
 		this.controller.dispose()
 		this.currentSnapshot = null
+		this.htmlLineById.clear()
+		this.htmlOrder = []
 		this.started = false
+	}
+
+	private seedHtmlCache(elements: SpatialElement[]): void {
+		this.htmlLineById.clear()
+		this.htmlOrder = []
+		for (const element of elements) {
+			this.htmlOrder.push(element.id)
+			this.htmlLineById.set(element.id, this.renderElementLine(element))
+		}
+	}
+
+	private composeSimplifiedHTML(): string {
+		const parts: string[] = []
+		for (const id of this.htmlOrder) {
+			const line = this.htmlLineById.get(id)
+			if (!line) continue
+			parts.push(line)
+		}
+		return parts.join('\n')
+	}
+
+	private renderElementLine(el: SpatialElement): string {
+		const attrs: string[] = []
+		if (el.inputType) attrs.push(`type="${escapeAttr(el.inputType)}"`)
+		if (el.placeholder) attrs.push(`placeholder="${escapeAttr(el.placeholder)}"`)
+		if (el.label) attrs.push(`aria-label="${escapeAttr(el.label)}"`)
+		if (el.autocomplete) attrs.push(`autocomplete="${escapeAttr(el.autocomplete)}"`)
+		if (el.href) attrs.push(`href="${escapeAttr(el.href)}"`)
+		const attrStr = attrs.length ? ` ${attrs.join(' ')}` : ''
+
+		if (el.tag === 'input' || el.tag === 'select') {
+			return `[${el.id}]<${el.tag}${attrStr} />`
+		}
+		const label = el.label || el.tag
+		return `[${el.id}]<${el.tag}${attrStr}>${label}</${el.tag}>`
 	}
 
 	// -----------------------------------------------------------------------
@@ -163,27 +204,29 @@ export class MirrorSession {
 		}
 
 		const elements = [...elementMap.values()]
+		const changedCount = diff.removed.length + diff.upserted.length
+		const largePatch = changedCount > 0 && changedCount / Math.max(this.htmlOrder.length, 1) >= 0.5
 
-		// Regenerate simplifiedHTML from elements (attributes are escaped to
-		// prevent malformed HTML from confusing the LLM's element index parsing).
-		const simplifiedHTML = elements
-			.map((el) => {
-				const attrs: string[] = []
-				if (el.inputType) attrs.push(`type="${escapeAttr(el.inputType)}"`)
-				if (el.placeholder) attrs.push(`placeholder="${escapeAttr(el.placeholder)}"`)
-				if (el.label) attrs.push(`aria-label="${escapeAttr(el.label)}"`)
-				if (el.autocomplete) attrs.push(`autocomplete="${escapeAttr(el.autocomplete)}"`)
-				if (el.href) attrs.push(`href="${escapeAttr(el.href)}"`)
+		if (!base || this.htmlOrder.length === 0 || largePatch) {
+			this.seedHtmlCache(elements)
+		} else {
+			for (const id of diff.removed) {
+				this.htmlLineById.delete(id)
+			}
+			if (diff.removed.length > 0) {
+				const removed = new Set(diff.removed)
+				this.htmlOrder = this.htmlOrder.filter((id) => !removed.has(id))
+			}
 
-				const attrStr = attrs.length ? ` ${attrs.join(' ')}` : ''
-
-				if (el.tag === 'input' || el.tag === 'select') {
-					return `[${el.id}]<${el.tag}${attrStr} />`
+			for (const el of diff.upserted) {
+				if (!this.htmlLineById.has(el.id)) {
+					this.htmlOrder.push(el.id)
 				}
-				const label = el.label || el.tag
-				return `[${el.id}]<${el.tag}${attrStr}>${label}</${el.tag}>`
-			})
-			.join('\n')
+				this.htmlLineById.set(el.id, this.renderElementLine(el))
+			}
+		}
+
+		const simplifiedHTML = this.composeSimplifiedHTML()
 
 		return {
 			seq: diff.seq,

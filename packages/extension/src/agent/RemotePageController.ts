@@ -82,8 +82,10 @@ export class RemotePageController implements IPageController {
 
 	async clickElement(index: number): Promise<ActionResult> {
 		const res = await this.callAction('click_element', index)
-		// may cause page navigation, wait for loading to start
-		await new Promise((resolve) => setTimeout(resolve, 1000))
+		const tabId = this.currentTabId
+		if (tabId) {
+			await this.tabsController.waitForPotentialNavigation(tabId)
+		}
 		return res
 	}
 

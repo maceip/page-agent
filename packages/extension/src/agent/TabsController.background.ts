@@ -1,7 +1,9 @@
 /**
- * background logics for TabsController
+ * Background logic for TabsController.
+ * Proxies typed TAB_CONTROL messages to chrome.tabs/tabGroups APIs.
  */
-import type { TabAction } from './TabsController'
+import type { TabControlAction, TabControlMessage } from './tab-control-protocol'
+import { isTabControlAction, validateTabControlPayload } from './tab-control-protocol'
 
 const PREFIX = '[TabsController.background]'
 
@@ -10,13 +12,28 @@ function debug(...messages: any[]) {
 }
 
 export function handleTabControlMessage(
-	message: { type: 'TAB_CONTROL'; action: TabAction; payload: any },
-	sender: chrome.runtime.MessageSender,
+	message: TabControlMessage,
+	_sender: chrome.runtime.MessageSender,
 	sendResponse: (response: unknown) => void
 ): true | undefined {
 	const { action, payload } = message
 
-	switch (action as TabAction) {
+	if (!isTabControlAction(action)) {
+		sendResponse({ success: false, error: `Unknown action: ${String(action)}` })
+		return
+	}
+
+	try {
+		validateTabControlPayload(action, payload)
+	} catch (error) {
+		sendResponse({
+			success: false,
+			error: error instanceof Error ? error.message : String(error),
+		})
+		return
+	}
+
+	switch (action as TabControlAction) {
 		case 'get_active_tab': {
 			debug('get_active_tab')
 			chrome.tabs
@@ -27,7 +44,10 @@ export function handleTabControlMessage(
 					sendResponse({ success: true, tabId })
 				})
 				.catch((error) => {
-					sendResponse({ error: error instanceof Error ? error.message : String(error) })
+					sendResponse({
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					})
 				})
 			return true // async response
 		}
@@ -35,13 +55,22 @@ export function handleTabControlMessage(
 		case 'get_tab_info': {
 			debug('get_tab_info', payload)
 			chrome.tabs
-				.get(payload.tabId)
+				.get((payload as { tabId: number }).tabId)
 				.then((tab) => {
 					debug('get_tab_info: success', tab)
-					sendResponse(tab)
+					sendResponse({
+						success: true,
+						tabId: tab.id ?? (payload as { tabId: number }).tabId,
+						title: tab.title ?? '',
+						url: tab.url ?? '',
+						status: (tab.status ?? 'unloaded') as 'loading' | 'unloaded' | 'complete',
+					})
 				})
 				.catch((error) => {
-					sendResponse({ error: error instanceof Error ? error.message : String(error) })
+					sendResponse({
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					})
 				})
 			return true // async response
 		}
@@ -49,13 +78,19 @@ export function handleTabControlMessage(
 		case 'open_new_tab': {
 			debug('open_new_tab', payload)
 			chrome.tabs
-				.create({ url: payload.url, active: false })
+				.create({ url: (payload as { url: string }).url, active: false })
 				.then((newTab) => {
+					if (newTab.id == null || newTab.windowId == null) {
+						throw new Error('New tab is missing id/windowId.')
+					}
 					debug('open_new_tab: success', newTab)
 					sendResponse({ success: true, tabId: newTab.id, windowId: newTab.windowId })
 				})
 				.catch((error) => {
-					sendResponse({ error: error instanceof Error ? error.message : String(error) })
+					sendResponse({
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					})
 				})
 			return true // async response
 		}
@@ -63,40 +98,59 @@ export function handleTabControlMessage(
 		case 'create_tab_group': {
 			debug('create_tab_group', payload)
 			chrome.tabs
-				.group({ tabIds: payload.tabIds, createProperties: { windowId: payload.windowId } })
+				.group({
+					tabIds: (payload as { tabIds: number[] }).tabIds,
+					createProperties: {
+						windowId: (payload as { windowId: number | null }).windowId ?? undefined,
+					},
+				})
 				.then((groupId) => {
 					debug('create_tab_group: success', groupId)
 					sendResponse({ success: true, groupId })
 				})
 				.catch((error) => {
 					console.error(PREFIX, 'Failed to create tab group', error)
-					sendResponse({ error: error instanceof Error ? error.message : String(error) })
+					sendResponse({
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					})
 				})
 			return true // async response
 		}
 
 		case 'update_tab_group': {
 			debug('update_tab_group', payload)
+			const args = payload as {
+				groupId: number
+				properties: chrome.tabGroups.UpdateProperties
+			}
 			chrome.tabGroups
-				.update(payload.groupId, payload.properties)
+				.update(args.groupId, args.properties)
 				.then(() => {
 					sendResponse({ success: true })
 				})
 				.catch((error) => {
-					sendResponse({ error: error instanceof Error ? error.message : String(error) })
+					sendResponse({
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					})
 				})
 			return true // async response
 		}
 
 		case 'add_tab_to_group': {
 			debug('add_tab_to_group', payload)
+			const args = payload as { tabId: number; groupId: number }
 			chrome.tabs
-				.group({ tabIds: payload.tabId, groupId: payload.groupId })
+				.group({ tabIds: args.tabId, groupId: args.groupId })
 				.then(() => {
 					sendResponse({ success: true })
 				})
 				.catch((error) => {
-					sendResponse({ error: error instanceof Error ? error.message : String(error) })
+					sendResponse({
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					})
 				})
 			return true // async response
 		}
@@ -104,18 +158,21 @@ export function handleTabControlMessage(
 		case 'close_tab': {
 			debug('close_tab', payload)
 			chrome.tabs
-				.remove(payload.tabId)
+				.remove((payload as { tabId: number }).tabId)
 				.then(() => {
 					sendResponse({ success: true })
 				})
 				.catch((error) => {
-					sendResponse({ error: error instanceof Error ? error.message : String(error) })
+					sendResponse({
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					})
 				})
 			return true // async response
 		}
 
 		default:
-			sendResponse({ error: `Unknown action: ${action}` })
+			sendResponse({ success: false, error: `Unknown action: ${action}` })
 			return
 	}
 }
