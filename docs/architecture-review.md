@@ -110,3 +110,8 @@ This graph explicitly includes `core`, `mirror`, and extension typecheck config.
 ## Guiding principle
 
 **Narrow public contracts, explicit internal ports, measurable performance budgets, and executable tests on real runtime code paths.**
+
+## Related ADRs
+
+- `docs/adr/0001-mirror-stable-vs-internal-api.md`
+- `docs/adr/0002-mirror-performance-budgets.md`
