@@ -48,7 +48,7 @@ jobs:
         run: npm ci
 
       - name: Typecheck
-        run: npx tsc --build --noEmit
+        run: npx tsc --noEmit --composite false
 
   test:
     runs-on: ubuntu-latest

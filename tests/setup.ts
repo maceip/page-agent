@@ -66,10 +66,9 @@ export class MockChromeAISession {
 	}
 
 	promptStreaming(text: string, options?: { signal?: AbortSignal }): ReadableStream<string> {
-		const self = this
 		return new ReadableStream({
-			async start(controller) {
-				const result = await self.prompt(text, options)
+			start: async (controller) => {
+				const result = await this.prompt(text, options)
 				controller.enqueue(result)
 				controller.close()
 			},
@@ -154,9 +153,7 @@ export class MockLanguageModelFactory {
 		return { available: this._available ? 'readily' : 'no' }
 	}
 
-	async create(
-		_options?: Record<string, unknown>
-	): Promise<MockChromeAISession> {
+	async create(_options?: Record<string, unknown>): Promise<MockChromeAISession> {
 		if (!this._available) throw new Error('Chrome AI not available')
 		return new MockChromeAISession({ responses: this._sessionOptions })
 	}
@@ -166,9 +163,10 @@ export class MockLanguageModelFactory {
  * Install mock Chrome AI onto the global scope.
  * Call this in tests that need the Chrome Built-in AI mock.
  */
-export function installMockChromeAI(
-	options?: { available?: boolean; responses?: Map<RegExp, string> }
-): () => void {
+export function installMockChromeAI(options?: {
+	available?: boolean
+	responses?: Map<RegExp, string>
+}): () => void {
 	const factory = new MockLanguageModelFactory(options)
 	const globalSelf = globalThis as any
 

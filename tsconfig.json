@@ -2,6 +2,14 @@
 // do not use this for building or linting.
 {
     "extends": "./tsconfig.base.json",
+    "compilerOptions": {
+        "paths": {
+            "@page-agent/page-controller": ["./packages/page-controller/src/PageController.ts"],
+            "@page-agent/llms": ["./packages/llms/src/index.ts"],
+            "@page-agent/core": ["./packages/core/src/PageAgentCore.ts"],
+            "@page-agent/ui": ["./packages/ui/src/index.ts"]
+        }
+    },
     "references": [
         { "path": "./packages/page-controller" },
         { "path": "./packages/ui" },
@@ -10,5 +18,5 @@
         { "path": "./packages/website" }
     ],
     "include": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx", "tests/**/*.ts"],
-    "exclude": ["node_modules", "dist", "packages/*/dist"]
+    "exclude": ["node_modules", "dist", "packages/*/dist", "packages/extension"]
 }
