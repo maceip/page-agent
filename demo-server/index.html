@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LinkedIn - Feed</title>
+<style>
+/* ===== Reset & Base ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, system-ui, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f2ee; color: rgba(0,0,0,.9); line-height: 1.5; }
+a { color: #0a66c2; text-decoration: none; }
+a:hover { text-decoration: underline; }
+img { display: block; }
+button { cursor: pointer; font-family: inherit; }
+
+/* ===== Layout ===== */
+.layout { max-width: 1128px; margin: 0 auto; display: grid; grid-template-columns: 225px 1fr 300px; gap: 24px; padding: 24px 16px; }
+
+/* ===== Nav ===== */
+.nav { position: sticky; top: 0; z-index: 100; background: #fff; border-bottom: 1px solid #e0e0e0; }
+.nav-inner { max-width: 1128px; margin: 0 auto; display: flex; align-items: center; height: 52px; padding: 0 16px; gap: 8px; }
+.nav-logo { width: 34px; height: 34px; background: #0a66c2; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 18px; flex-shrink: 0; }
+.nav-search { flex: 0 1 280px; position: relative; }
+.nav-search input { width: 100%; height: 34px; border: none; background: #eef3f8; border-radius: 4px; padding: 0 12px 0 36px; font-size: 14px; }
+.nav-search svg { position: absolute; left: 10px; top: 9px; width: 16px; height: 16px; fill: rgba(0,0,0,.6); }
+.nav-links { display: flex; gap: 0; margin-left: auto; }
+.nav-link { display: flex; flex-direction: column; align-items: center; padding: 0 12px; color: rgba(0,0,0,.6); font-size: 11px; line-height: 1.2; height: 52px; justify-content: center; border-bottom: 2px solid transparent; min-width: 60px; }
+.nav-link.active { color: rgba(0,0,0,.9); border-bottom-color: rgba(0,0,0,.9); }
+.nav-link svg { width: 24px; height: 24px; fill: currentColor; margin-bottom: 2px; }
+
+/* ===== Left Sidebar ===== */
+.sidebar-left .profile-card { background: #fff; border-radius: 8px; overflow: hidden; border: 1px solid #e0e0e0; }
+.profile-banner { height: 56px; background: linear-gradient(135deg, #004182 0%, #0a66c2 100%); }
+.profile-avatar { width: 72px; height: 72px; border-radius: 50%; background: #e0e0e0; border: 2px solid #fff; margin: -38px auto 0; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 600; color: #fff; background: #56687a; }
+.profile-info { text-align: center; padding: 12px 16px 16px; }
+.profile-info h3 { font-size: 16px; font-weight: 600; }
+.profile-info p { font-size: 12px; color: rgba(0,0,0,.6); }
+.profile-stats { border-top: 1px solid #e0e0e0; padding: 12px 16px; }
+.profile-stat { display: flex; justify-content: space-between; font-size: 12px; color: rgba(0,0,0,.6); margin-bottom: 4px; }
+.profile-stat span:last-child { color: #0a66c2; font-weight: 600; }
+.sidebar-section { background: #fff; border-radius: 8px; border: 1px solid #e0e0e0; margin-top: 8px; padding: 12px; }
+.sidebar-section h4 { font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+.sidebar-section a { display: block; font-size: 12px; font-weight: 600; padding: 4px 0; }
+
+/* ===== Feed ===== */
+.feed { min-width: 0; }
+.create-post { background: #fff; border-radius: 8px; border: 1px solid #e0e0e0; padding: 12px 16px; margin-bottom: 8px; }
+.create-post-top { display: flex; gap: 8px; align-items: center; }
+.create-post-avatar { width: 48px; height: 48px; border-radius: 50%; background: #56687a; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 600; font-size: 18px; flex-shrink: 0; }
+.create-post-input { flex: 1; height: 48px; border: 1px solid rgba(0,0,0,.3); border-radius: 24px; padding: 0 16px; font-size: 14px; color: rgba(0,0,0,.6); display: flex; align-items: center; cursor: pointer; background: none; width: 100%; text-align: left; }
+.create-post-input:hover { background: rgba(0,0,0,.04); }
+.create-post-actions { display: flex; gap: 4px; margin-top: 8px; justify-content: space-around; }
+.create-post-action { display: flex; align-items: center; gap: 8px; padding: 10px 8px; border-radius: 4px; border: none; background: none; font-size: 14px; font-weight: 600; color: rgba(0,0,0,.6); }
+.create-post-action:hover { background: rgba(0,0,0,.08); }
+.create-post-action .icon { width: 24px; height: 24px; border-radius: 4px; }
+.icon-photo { background: #378fe9; }
+.icon-video { background: #5f9b41; }
+.icon-event { background: #c37d16; }
+.icon-article { background: #e16745; }
+
+.sort-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; color: rgba(0,0,0,.6); }
+.sort-bar hr { flex: 1; border: none; border-top: 1px solid #e0e0e0; }
+
+/* ===== Post Cards ===== */
+.post-card { background: #fff; border-radius: 8px; border: 1px solid #e0e0e0; margin-bottom: 8px; }
+.post-header { display: flex; gap: 8px; padding: 12px 16px 0; }
+.post-avatar { width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 18px; color: #fff; }
+.post-meta h4 { font-size: 14px; font-weight: 600; line-height: 1.3; }
+.post-meta p { font-size: 12px; color: rgba(0,0,0,.6); line-height: 1.3; }
+.post-body { padding: 12px 16px; font-size: 14px; line-height: 1.5; }
+.post-body p { margin-bottom: 8px; }
+.post-image { width: 100%; max-height: 400px; object-fit: cover; background: #e8e8e8; display: flex; align-items: center; justify-content: center; color: rgba(0,0,0,.3); font-size: 14px; min-height: 200px; }
+.post-stats { padding: 8px 16px; display: flex; justify-content: space-between; font-size: 12px; color: rgba(0,0,0,.6); border-bottom: 1px solid #e0e0e0; }
+.post-actions { display: flex; padding: 4px 8px; }
+.post-action { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 8px; border: none; background: none; border-radius: 4px; font-size: 14px; font-weight: 600; color: rgba(0,0,0,.6); }
+.post-action:hover { background: rgba(0,0,0,.08); }
+.post-action svg { width: 24px; height: 24px; fill: currentColor; }
+
+/* ===== Right Sidebar ===== */
+.sidebar-right .news-card { background: #fff; border-radius: 8px; border: 1px solid #e0e0e0; padding: 12px; }
+.news-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+.news-item { padding: 8px 0; }
+.news-item h5 { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.news-item p { font-size: 12px; color: rgba(0,0,0,.6); }
+.news-item + .news-item { border-top: 1px solid #f0f0f0; }
+.footer-links { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: rgba(0,0,0,.6); }
+.footer-links a { color: rgba(0,0,0,.6); }
+.footer-brand { display: flex; align-items: center; gap: 4px; margin-top: 8px; font-size: 11px; color: rgba(0,0,0,.6); }
+
+/* ===== Messaging Widget ===== */
+.messaging-widget { position: fixed; bottom: 0; right: 24px; width: 300px; background: #fff; border-radius: 8px 8px 0 0; box-shadow: 0 0 8px rgba(0,0,0,.15); z-index: 50; }
+.messaging-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #e0e0e0; cursor: pointer; }
+.messaging-header h4 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.messaging-header .dot { width: 8px; height: 8px; border-radius: 50%; background: #057642; }
+.messaging-body { padding: 8px; max-height: 0; overflow: hidden; transition: max-height .3s; }
+.messaging-widget.open .messaging-body { max-height: 300px; }
+.msg-contact { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 4px; cursor: pointer; }
+.msg-contact:hover { background: rgba(0,0,0,.04); }
+.msg-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 600; font-size: 14px; flex-shrink: 0; }
+.msg-info { min-width: 0; }
+.msg-info h5 { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msg-info p { font-size: 12px; color: rgba(0,0,0,.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ===== Responsive ===== */
+@media (max-width: 1024px) { .layout { grid-template-columns: 1fr; } .sidebar-left, .sidebar-right { display: none; } }
+</style>
+</head>
+<body>
+
+<!-- ===== Navigation ===== -->
+<nav class="nav">
+<div class="nav-inner">
+	<div class="nav-logo">in</div>
+	<div class="nav-search">
+		<svg viewBox="0 0 16 16"><path d="M14.56 12.44L11.3 9.18a5.51 5.51 0 10-2.12 2.12l3.26 3.26a1.5 1.5 0 002.12-2.12zM3 6.5A3.5 3.5 0 116.5 10 3.5 3.5 0 013 6.5z"/></svg>
+		<input type="text" placeholder="Search" id="search-input">
+	</div>
+	<div class="nav-links">
+		<a class="nav-link active" href="#">
+			<svg viewBox="0 0 24 24"><path d="M23 9v2h-2v7a3 3 0 01-3 3h-4v-6h-4v6H6a3 3 0 01-3-3v-7H1V9l11-7z"/></svg>
+			Home
+		</a>
+		<a class="nav-link" href="#">
+			<svg viewBox="0 0 24 24"><path d="M12 16v6H3v-6a3 3 0 013-3h3a3 3 0 013 3zm5.5-3A3.5 3.5 0 1014 9.5a3.5 3.5 0 003.5 3.5zm1 2h-2a2.5 2.5 0 00-2.5 2.5V22h7v-4.5a2.5 2.5 0 00-2.5-2.5zM7.5 8A3.5 3.5 0 104 11.5 3.5 3.5 0 007.5 8z"/></svg>
+			My Network
+		</a>
+		<a class="nav-link" href="#">
+			<svg viewBox="0 0 24 24"><path d="M17 6V5a3 3 0 00-3-3h-4a3 3 0 00-3 3v1H2v4a3 3 0 003 3h14a3 3 0 003-3V6zM9 5a1 1 0 011-1h4a1 1 0 011 1v1H9zm10 9a4 4 0 003-1.38V17a3 3 0 01-3 3H5a3 3 0 01-3-3v-4.38A4 4 0 005 14z"/></svg>
+			Jobs
+		</a>
+		<a class="nav-link" href="#">
+			<svg viewBox="0 0 24 24"><path d="M16 4H8a7 7 0 000 14h4v4l8.16-5.39A6.78 6.78 0 0023 11a7 7 0 00-7-7zm-8 8.25A1.25 1.25 0 119.25 11 1.25 1.25 0 018 12.25zm4 0A1.25 1.25 0 1113.25 11 1.25 1.25 0 0112 12.25zm4 0A1.25 1.25 0 1117.25 11 1.25 1.25 0 0116 12.25z"/></svg>
+			Messaging
+		</a>
+		<a class="nav-link" href="#">
+			<svg viewBox="0 0 24 24"><path d="M22 19h-8.28a2 2 0 11-3.44 0H2v-1a4.52 4.52 0 011.17-2.83l1-1.17h15.7l1 1.17A4.42 4.42 0 0122 18zM18.21 7.44A6.27 6.27 0 0012 2a6.27 6.27 0 00-6.21 5.44L5 13h14z"/></svg>
+			Notifications
+		</a>
+	</div>
+</div>
+</nav>
+
+<!-- ===== Main Layout ===== -->
+<div class="layout">
+
+<!-- Left Sidebar -->
+<aside class="sidebar-left">
+	<div class="profile-card">
+		<div class="profile-banner"></div>
+		<div class="profile-avatar">JD</div>
+		<div class="profile-info">
+			<h3>Jane Doe</h3>
+			<p>Senior Software Engineer at TechCorp</p>
+			<p style="margin-top:4px; font-size:12px; color:rgba(0,0,0,.6);">San Francisco Bay Area</p>
+		</div>
+		<div class="profile-stats">
+			<div class="profile-stat"><span>Profile viewers</span><span>142</span></div>
+			<div class="profile-stat"><span>Post impressions</span><span>1,893</span></div>
+		</div>
+	</div>
+	<div class="sidebar-section">
+		<h4>Recent</h4>
+		<a href="#">#webdevelopment</a>
+		<a href="#">#artificialintelligence</a>
+		<a href="#">#opensource</a>
+		<a href="#">#typescript</a>
+	</div>
+	<div class="sidebar-section">
+		<a href="#">Groups</a>
+		<a href="#">Events</a>
+		<a href="#">Followed Hashtags</a>
+	</div>
+</aside>
+
+<!-- Feed -->
+<main class="feed">
+	<div class="create-post">
+		<div class="create-post-top">
+			<div class="create-post-avatar">JD</div>
+			<button class="create-post-input" id="start-post-btn">Start a post, try AI</button>
+		</div>
+		<div class="create-post-actions">
+			<button class="create-post-action"><span class="icon icon-photo"></span> Photo</button>
+			<button class="create-post-action"><span class="icon icon-video"></span> Video</button>
+			<button class="create-post-action"><span class="icon icon-event"></span> Event</button>
+			<button class="create-post-action"><span class="icon icon-article"></span> Write article</button>
+		</div>
+	</div>
+
+	<div class="sort-bar">
+		<hr>
+		<span>Sort by: <strong>Top</strong> ▾</span>
+	</div>
+
+	<!-- Post 1 -->
+	<article class="post-card">
+		<div class="post-header">
+			<div class="post-avatar" style="background:#2d6a4f">SC</div>
+			<div class="post-meta">
+				<h4>Sarah Chen</h4>
+				<p>VP of Engineering at CloudScale · 2nd</p>
+				<p>2h · 🌐</p>
+			</div>
+		</div>
+		<div class="post-body">
+			<p>Excited to share that our team just shipped a major infrastructure upgrade — we reduced P99 latency by 40% across all services! 🚀</p>
+			<p>Key takeaways from the project:</p>
+			<p>1. Profile before you optimize<br>
+			2. Connection pooling is still underrated<br>
+			3. Async I/O everywhere<br>
+			4. Cache invalidation is still the hardest problem in CS 😅</p>
+			<p>Huge shoutout to the platform engineering team. #engineering #performance #cloud</p>
+		</div>
+		<div class="post-image">📊 Infrastructure Performance Dashboard</div>
+		<div class="post-stats">
+			<span>👍 ❤️ 🎉 2,481</span>
+			<span>187 comments · 42 reposts</span>
+		</div>
+		<div class="post-actions">
+			<button class="post-action" data-action="like"><svg viewBox="0 0 24 24"><path d="M19.46 11l-3.91-3.91a7 7 0 01-1.69-2.74l-.49-1.47A2.76 2.76 0 0010.76 1 2.75 2.75 0 008 3.74v1.12a9.19 9.19 0 00.46 2.85L8.89 9H4.12A2.12 2.12 0 002 11.12a2.16 2.16 0 00.92 1.76A2.11 2.11 0 002 14.62a2.14 2.14 0 001.28 2 2 2 0 00-.28 1 2.12 2.12 0 002 2.12v.14A2.12 2.12 0 007.12 22h7.49a8.08 8.08 0 003.58-.84l.31-.16H21V11z"/></svg> Like</button>
+			<button class="post-action" data-action="comment"><svg viewBox="0 0 24 24"><path d="M7 9h10v1H7zm0 4h7v-1H7zm16-2a6.78 6.78 0 01-2.84 5.61L12 22v-4H8A7 7 0 018 4h8a7 7 0 017 7z"/></svg> Comment</button>
+			<button class="post-action" data-action="repost"><svg viewBox="0 0 24 24"><path d="M13.96 5H6c-1.65 0-3 1.35-3 3v4h2V8c0-.55.45-1 1-1h7.96L12 10l1.42 1.42L17.84 7l-4.42-4.42L12 4l1.96 1zm-3.92 14H18c1.65 0 3-1.35 3-3v-4h-2v4c0 .55-.45 1-1 1h-7.96L12 14l-1.42-1.42L6.16 17l4.42 4.42L12 20l-1.96-1z"/></svg> Repost</button>
+			<button class="post-action" data-action="send"><svg viewBox="0 0 24 24"><path d="M21 3L0 10l7.66 4.26L20 6 8.07 17.73 12.27 24z"/></svg> Send</button>
+		</div>
+	</article>
+
+	<!-- Post 2 -->
+	<article class="post-card">
+		<div class="post-header">
+			<div class="post-avatar" style="background:#7c3aed">MR</div>
+			<div class="post-meta">
+				<h4>Mike Rodriguez</h4>
+				<p>AI/ML Lead at DeepMind · 1st</p>
+				<p>5h · 🌐</p>
+			</div>
+		</div>
+		<div class="post-body">
+			<p>Hot take: The best AI engineers in 2026 won't be the ones who can build models from scratch.</p>
+			<p>They'll be the ones who can:</p>
+			<p>→ Evaluate when AI is the right solution<br>
+			→ Design robust human-in-the-loop systems<br>
+			→ Build reliable evaluation pipelines<br>
+			→ Ship incremental improvements, not moonshots</p>
+			<p>The industry is maturing. Engineering discipline matters more than ever.</p>
+			<p>Agree or disagree? 👇</p>
+		</div>
+		<div class="post-stats">
+			<span>👍 ❤️ 💡 5,219</span>
+			<span>842 comments · 203 reposts</span>
+		</div>
+		<div class="post-actions">
+			<button class="post-action" data-action="like"><svg viewBox="0 0 24 24"><path d="M19.46 11l-3.91-3.91a7 7 0 01-1.69-2.74l-.49-1.47A2.76 2.76 0 0010.76 1 2.75 2.75 0 008 3.74v1.12a9.19 9.19 0 00.46 2.85L8.89 9H4.12A2.12 2.12 0 002 11.12a2.16 2.16 0 00.92 1.76A2.11 2.11 0 002 14.62a2.14 2.14 0 001.28 2 2 2 0 00-.28 1 2.12 2.12 0 002 2.12v.14A2.12 2.12 0 007.12 22h7.49a8.08 8.08 0 003.58-.84l.31-.16H21V11z"/></svg> Like</button>
+			<button class="post-action" data-action="comment"><svg viewBox="0 0 24 24"><path d="M7 9h10v1H7zm0 4h7v-1H7zm16-2a6.78 6.78 0 01-2.84 5.61L12 22v-4H8A7 7 0 018 4h8a7 7 0 017 7z"/></svg> Comment</button>
+			<button class="post-action" data-action="repost"><svg viewBox="0 0 24 24"><path d="M13.96 5H6c-1.65 0-3 1.35-3 3v4h2V8c0-.55.45-1 1-1h7.96L12 10l1.42 1.42L17.84 7l-4.42-4.42L12 4l1.96 1zm-3.92 14H18c1.65 0 3-1.35 3-3v-4h-2v4c0 .55-.45 1-1 1h-7.96L12 14l-1.42-1.42L6.16 17l4.42 4.42L12 20l-1.96-1z"/></svg> Repost</button>
+			<button class="post-action" data-action="send"><svg viewBox="0 0 24 24"><path d="M21 3L0 10l7.66 4.26L20 6 8.07 17.73 12.27 24z"/></svg> Send</button>
+		</div>
+	</article>
+
+	<!-- Post 3 -->
+	<article class="post-card">
+		<div class="post-header">
+			<div class="post-avatar" style="background:#dc2626">AL</div>
+			<div class="post-meta">
+				<h4>Amy Liu</h4>
+				<p>Founder & CEO at GreenPath · 3rd+</p>
+				<p>8h · 🌐</p>
+			</div>
+		</div>
+		<div class="post-body">
+			<p>We just closed our Series B! 🎉 $45M to make sustainable supply chains the default, not the exception.</p>
+			<p>When I started GreenPath 3 years ago, everyone said B2B sustainability was a nice-to-have. Now our customers are telling us it's their top priority for 2026.</p>
+			<p>Thank you to our investors, our incredible team of 85, and every customer who believed in this mission early.</p>
+			<p>We're hiring across engineering, sales, and ops. DM me if you're interested! 🌱</p>
+		</div>
+		<div class="post-image">🎉 GreenPath Series B Announcement</div>
+		<div class="post-stats">
+			<span>👍 ❤️ 🎉 8,342</span>
+			<span>1,204 comments · 567 reposts</span>
+		</div>
+		<div class="post-actions">
+			<button class="post-action" data-action="like"><svg viewBox="0 0 24 24"><path d="M19.46 11l-3.91-3.91a7 7 0 01-1.69-2.74l-.49-1.47A2.76 2.76 0 0010.76 1 2.75 2.75 0 008 3.74v1.12a9.19 9.19 0 00.46 2.85L8.89 9H4.12A2.12 2.12 0 002 11.12a2.16 2.16 0 00.92 1.76A2.11 2.11 0 002 14.62a2.14 2.14 0 001.28 2 2 2 0 00-.28 1 2.12 2.12 0 002 2.12v.14A2.12 2.12 0 007.12 22h7.49a8.08 8.08 0 003.58-.84l.31-.16H21V11z"/></svg> Like</button>
+			<button class="post-action" data-action="comment"><svg viewBox="0 0 24 24"><path d="M7 9h10v1H7zm0 4h7v-1H7zm16-2a6.78 6.78 0 01-2.84 5.61L12 22v-4H8A7 7 0 018 4h8a7 7 0 017 7z"/></svg> Comment</button>
+			<button class="post-action" data-action="repost"><svg viewBox="0 0 24 24"><path d="M13.96 5H6c-1.65 0-3 1.35-3 3v4h2V8c0-.55.45-1 1-1h7.96L12 10l1.42 1.42L17.84 7l-4.42-4.42L12 4l1.96 1zm-3.92 14H18c1.65 0 3-1.35 3-3v-4h-2v4c0 .55-.45 1-1 1h-7.96L12 14l-1.42-1.42L6.16 17l4.42 4.42L12 20l-1.96-1z"/></svg> Repost</button>
+			<button class="post-action" data-action="send"><svg viewBox="0 0 24 24"><path d="M21 3L0 10l7.66 4.26L20 6 8.07 17.73 12.27 24z"/></svg> Send</button>
+		</div>
+	</article>
+
+	<!-- Post 4 -->
+	<article class="post-card">
+		<div class="post-header">
+			<div class="post-avatar" style="background:#0891b2">TW</div>
+			<div class="post-meta">
+				<h4>Tom Wilson</h4>
+				<p>Staff Engineer at Stripe · 2nd</p>
+				<p>12h · 🌐</p>
+			</div>
+		</div>
+		<div class="post-body">
+			<p>Just published a deep-dive on how we migrated 2,000+ microservices to gRPC without a single minute of downtime.</p>
+			<p>TL;DR: The secret was a dual-protocol proxy layer and a 6-month canary rollout.</p>
+			<p>Full write-up on the Stripe Engineering Blog (link in comments). Feedback welcome! 🙏</p>
+		</div>
+		<div class="post-stats">
+			<span>👍 💡 1,107</span>
+			<span>234 comments · 89 reposts</span>
+		</div>
+		<div class="post-actions">
+			<button class="post-action" data-action="like"><svg viewBox="0 0 24 24"><path d="M19.46 11l-3.91-3.91a7 7 0 01-1.69-2.74l-.49-1.47A2.76 2.76 0 0010.76 1 2.75 2.75 0 008 3.74v1.12a9.19 9.19 0 00.46 2.85L8.89 9H4.12A2.12 2.12 0 002 11.12a2.16 2.16 0 00.92 1.76A2.11 2.11 0 002 14.62a2.14 2.14 0 001.28 2 2 2 0 00-.28 1 2.12 2.12 0 002 2.12v.14A2.12 2.12 0 007.12 22h7.49a8.08 8.08 0 003.58-.84l.31-.16H21V11z"/></svg> Like</button>
+			<button class="post-action" data-action="comment"><svg viewBox="0 0 24 24"><path d="M7 9h10v1H7zm0 4h7v-1H7zm16-2a6.78 6.78 0 01-2.84 5.61L12 22v-4H8A7 7 0 018 4h8a7 7 0 017 7z"/></svg> Comment</button>
+			<button class="post-action" data-action="repost"><svg viewBox="0 0 24 24"><path d="M13.96 5H6c-1.65 0-3 1.35-3 3v4h2V8c0-.55.45-1 1-1h7.96L12 10l1.42 1.42L17.84 7l-4.42-4.42L12 4l1.96 1zm-3.92 14H18c1.65 0 3-1.35 3-3v-4h-2v4c0 .55-.45 1-1 1h-7.96L12 14l-1.42-1.42L6.16 17l4.42 4.42L12 20l-1.96-1z"/></svg> Repost</button>
+			<button class="post-action" data-action="send"><svg viewBox="0 0 24 24"><path d="M21 3L0 10l7.66 4.26L20 6 8.07 17.73 12.27 24z"/></svg> Send</button>
+		</div>
+	</article>
+</main>
+
+<!-- Right Sidebar -->
+<aside class="sidebar-right">
+	<div class="news-card">
+		<h3>LinkedIn News</h3>
+		<div class="news-item">
+			<h5>AI agents reshape enterprise workflows</h5>
+			<p>Top news · 4,892 readers</p>
+		</div>
+		<div class="news-item">
+			<h5>Remote work policies shift again in 2026</h5>
+			<p>1d ago · 3,201 readers</p>
+		</div>
+		<div class="news-item">
+			<h5>Startup funding rebounds in Q1</h5>
+			<p>2d ago · 2,150 readers</p>
+		</div>
+		<div class="news-item">
+			<h5>New JavaScript runtime gains traction</h5>
+			<p>3d ago · 1,879 readers</p>
+		</div>
+		<div class="news-item">
+			<h5>Tech layoffs slow as hiring picks up</h5>
+			<p>5d ago · 5,432 readers</p>
+		</div>
+	</div>
+	<div class="footer-links">
+		<a href="#">About</a>
+		<a href="#">Accessibility</a>
+		<a href="#">Help Center</a>
+		<a href="#">Privacy & Terms</a>
+		<a href="#">Ad Choices</a>
+		<a href="#">Advertising</a>
+		<a href="#">Business Services</a>
+		<div class="footer-brand"><div class="nav-logo" style="width:16px;height:16px;font-size:10px;border-radius:2px">in</div> LinkedIn Corporation © 2026</div>
+	</div>
+</aside>
+
+</div>
+
+<!-- Messaging Widget -->
+<div class="messaging-widget" id="msg-widget">
+	<div class="messaging-header" onclick="document.getElementById('msg-widget').classList.toggle('open')">
+		<h4><span class="dot"></span> Messaging</h4>
+		<span>✏️</span>
+	</div>
+	<div class="messaging-body">
+		<div class="msg-contact">
+			<div class="msg-avatar" style="background:#2d6a4f">SC</div>
+			<div class="msg-info"><h5>Sarah Chen</h5><p>Great meeting you at the conf...</p></div>
+		</div>
+		<div class="msg-contact">
+			<div class="msg-avatar" style="background:#7c3aed">MR</div>
+			<div class="msg-info"><h5>Mike Rodriguez</h5><p>Thanks for the referral!</p></div>
+		</div>
+		<div class="msg-contact">
+			<div class="msg-avatar" style="background:#0891b2">TW</div>
+			<div class="msg-info"><h5>Tom Wilson</h5><p>Let's sync on the API design...</p></div>
+		</div>
+	</div>
+</div>
+
+<!-- Add some interactivity -->
+<script>
+// Like button toggling
+document.querySelectorAll('[data-action="like"]').forEach(btn => {
+	btn.addEventListener('click', () => {
+		btn.classList.toggle('liked');
+		if (btn.classList.contains('liked')) {
+			btn.style.color = '#0a66c2';
+			btn.innerHTML = btn.innerHTML.replace('Like', 'Liked');
+		} else {
+			btn.style.color = '';
+			btn.innerHTML = btn.innerHTML.replace('Liked', 'Like');
+		}
+	});
+});
+
+// Search functionality
+document.getElementById('search-input').addEventListener('keydown', e => {
+	if (e.key === 'Enter') {
+		const q = e.target.value.trim();
+		if (q) console.log('Search for:', q);
+	}
+});
+</script>
+
+<!-- Inject page-agent -->
+<script src="/page-agent.demo.js" crossorigin="true"></script>
+
+</body>
+</html>
