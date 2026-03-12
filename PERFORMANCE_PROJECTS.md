@@ -304,25 +304,25 @@ Performance here means: **fewer steps to complete tasks, higher task success rat
 
 ## Priority Matrix
 
-| Project | Effort | Impact | Priority |
-|---------|--------|--------|----------|
-| S1 — DOM Pruning | S | High | P0 — Do first |
-| S3 — Action Result Enrichment | S | High | P0 — Do first |
-| S5 — Loop Detection | S | High | P0 — Do first |
-| S2 — Adaptive Delays | S | Medium | P1 |
-| S4 — Streaming Responses | S | Medium | P1 |
-| M1 — Two-Phase Planning | M | Very High | P0 — Do first |
-| M4 — Keyboard Actions | M | High | P0 — Do first |
-| M2 — Semantic Targeting | M | High | P1 |
-| M3 — History Compression | M | High | P1 |
-| M5 — Intelligent Retry | M | Medium | P2 |
-| L2 — Visual Grounding | L | Very High | P0 |
-| L1 — Multi-Tab | L | High | P1 |
-| L3 — Trajectory Learning | L | High | P2 |
-| XL1 — Speculative Execution | XL | Very High | P0 |
-| XL3 — Hierarchical Agents | XL | Very High | P1 |
-| XL4 — Predictive Pre-Fetch | XL | High | P1 |
-| XL2 — Online RL | XL | High | P2 |
+| Project | Level of Effort | Impact | Confidence: Will It Work? | Confidence: Meaningful Perf Impact? | Priority |
+|---------|----------------|--------|--------------------------|-------------------------------------|----------|
+| S1 — DOM Pruning | S (1–2 days) | High — 30–50% token reduction per step | **Very High** — straightforward filtering, no novel risk | **High** — proven technique in other agents (WebArena, SeeAct); direct token savings measurable immediately | P0 — Do first |
+| S3 — Action Result Enrichment | S (2–3 days) | High — 15–25% fewer total steps | **Very High** — DOM diffing is deterministic; no LLM dependency for the diff itself | **High** — reduces wasted "observe-only" steps; effect scales with task complexity | P0 — Do first |
+| S5 — Loop Detection | S (1–2 days) | High — eliminates #1 cause of max-step failures | **Very High** — simple heuristic (action+hash dedup), zero technical risk | **High** — directly prevents the most common failure mode; 10–20% success rate uplift on stuck tasks | P0 — Do first |
+| S2 — Adaptive Delays | S (2–3 days) | Medium — 40–70% wall-clock reduction | **High** — MutationObserver + network idle detection are well-understood browser APIs | **Medium** — big latency win, but doesn't improve success rate or token cost; mainly UX | P1 |
+| S4 — Streaming Responses | S (2–3 days) | Medium — 1–3s latency saved per step | **Medium** — incremental JSON parsing of tool-call responses is fiddly; edge cases with malformed streams | **Medium** — latency improvement only, no accuracy or token benefit; value depends on model speed | P1 |
+| M1 — Two-Phase Planning | M (5–7 days) | Very High — 20–40% success rate on complex tasks | **Medium** — the planning prompt needs careful tuning; risk that plan becomes stale on dynamic pages | **High** — academic evidence (Inner Monologue, SayCan, ReAct-Plan) shows planning lifts success on multi-step tasks significantly | P0 — Do first |
+| M4 — Keyboard Actions | M (3–5 days) | High — unlocks entire failing task categories | **Very High** — dispatching KeyboardEvents is well-understood; clear implementation path | **Very High** — "press Enter to submit search" is the single most common missing capability; immediate unblock | P0 — Do first |
+| M2 — Semantic Targeting | M (5–7 days) | High — 10–15% success rate on SPAs | **High** — fuzzy matching on element signatures is proven (Playwright locators use similar); main risk is false-positive matches | **Medium-High** — helps on dynamic pages, but index staleness may not be the primary failure mode in practice; needs measurement | P1 |
+| M3 — History Compression | M (5–7 days) | High — enables 40+ step tasks | **High** — sliding-window summarization is a known technique; template-based compression is low-risk | **Medium-High** — critical for long tasks, but most current tasks complete in <15 steps where history isn't the bottleneck | P1 |
+| M5 — Intelligent Retry | M (3–5 days) | Medium — recovers ~30% of hard failures | **High** — error classification is deterministic; backoff strategies are well-proven | **Medium** — most failures are agent logic errors, not LLM API errors; helps in production but doesn't move benchmarks | P2 |
+| L2 — Visual Grounding | L (2–3 weeks) | Very High — 15–30% accuracy on complex pages | **Medium** — requires multimodal LLM; bounding-box overlay rendering + image encoding adds complexity; screenshot quality varies | **High** — strong evidence from vision-based agents (SeeAct, WebVoyager) that visual grounding closes the gap on layout-dependent tasks | P0 |
+| L1 — Multi-Tab | L (2–3 weeks) | High — new task category | **Medium** — chrome extension messaging is fragile; coordinating multiple agent instances is architecturally complex; race conditions likely | **Medium** — unlocks new use cases but most benchmarks are single-page; competitive differentiator more than perf metric | P1 |
+| L3 — Trajectory Learning | L (2–3 weeks) | High — continuous improvement | **Low-Medium** — requires trajectory collection pipeline, clustering, and prompt distillation; cold-start problem; quality depends on user volume | **Medium** — long-term compounding value, but initial iterations may show modest gains; 3+ release cycles to realize full benefit | P2 |
+| XL1 — Speculative Execution | XL (4–6 weeks) | Very High — 25–40% on ambiguous tasks | **Low-Medium** — DOM snapshotting + rollback is hard to do perfectly in a live browser; shadow execution may have side effects (network requests, state mutations) that can't be undone | **Medium-High** — beam search is theoretically superior to greedy; but cost multiplier (2–3x tokens) may offset gains; needs careful branch-limit tuning | P0 |
+| XL3 — Hierarchical Agents | XL (6–8 weeks) | Very High — 20–35% across all tasks | **Medium** — agent routing/dispatch is well-studied but per-specialist prompt engineering is a large surface area; coordination overhead may eat into gains | **Medium-High** — specialist agents outperform generalists in literature, but diminishing returns if the base agent is already well-tuned | P1 |
+| XL4 — Predictive Pre-Fetch | XL (4–6 weeks) | High — 50–80% dead-time reduction | **Low-Medium** — action prediction accuracy will be low initially; cache invalidation on wrong predictions adds complexity; Web Worker DOM access has limitations | **Medium** — impressive latency wins if predictions are accurate, but prediction miss rate could make it net-negative; high implementation cost for uncertain payoff | P1 |
+| XL2 — Online RL | XL (6–8 weeks) | High — 30–50% fewer steps after learning | **Low** — reward model design is an open research problem; online RL in production is notoriously unstable; prompt-based policy adaptation is fragile | **Low-Medium** — theoretical ceiling is high but practical realization is unproven in browser agent contexts; risk of reward hacking / degenerate strategies | P2 |
 
 ## Recommended Execution Order
 
