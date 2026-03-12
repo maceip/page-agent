@@ -2,8 +2,6 @@ import type { LLMConfig } from '@page-agent/llms'
 
 // @note circular dependency but okay
 import type { PageAgentCore } from './PageAgentCore'
-import type { ChameleonConfig } from './chameleon'
-import type { PeekabooConfig } from './peekaboo'
 import type { PageAgentTool } from './tools'
 
 /** Supported UI languages */
@@ -134,23 +132,6 @@ export interface AgentConfig extends LLMConfig {
 	 * @default false
 	 */
 	experimentalLlmsTxt?: boolean
-
-	/**
-	 * Peekaboo mode configuration.
-	 * When enabled, the agent can self-remove from the page if fingerprinting
-	 * is detected, then prompt the user to re-inject.
-	 * @experimental
-	 */
-	peekaboo?: PeekabooConfig
-
-	/**
-	 * Chameleon anti-fingerprinting configuration.
-	 * Applies layered strategies to prevent the agent from being
-	 * false-positive detected as automation software.
-	 * Automatically enabled when peekaboo is enabled.
-	 * @experimental
-	 */
-	chameleon?: ChameleonConfig
 
 	/**
 	 * Transform page content before sending to LLM.

@@ -1,0 +1,38 @@
+{
+    "name": "@page-agent/core-ext",
+    "private": false,
+    "version": "1.5.5",
+    "type": "module",
+    "main": "./dist/esm/core-ext.js",
+    "module": "./dist/esm/core-ext.js",
+    "types": "./dist/esm/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/esm/index.d.ts",
+            "import": "./dist/esm/core-ext.js",
+            "default": "./dist/esm/core-ext.js"
+        }
+    },
+    "files": [
+        "dist/"
+    ],
+    "description": "Stealth extensions for page-agent: peekaboo self-removal, chameleon anti-fingerprinting, content sanitization",
+    "keywords": [
+        "page-agent",
+        "anti-fingerprinting",
+        "stealth",
+        "peekaboo",
+        "chameleon"
+    ],
+    "license": "MIT",
+    "scripts": {
+        "build": "vite build"
+    },
+    "dependencies": {
+        "dompurify": "^3.2.4",
+        "@page-agent/core": "1.5.5"
+    },
+    "devDependencies": {
+        "@types/dompurify": "^3.0.5"
+    }
+}

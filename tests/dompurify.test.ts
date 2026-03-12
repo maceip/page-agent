@@ -8,7 +8,7 @@
 import DOMPurify from 'dompurify'
 import { describe, expect, it } from 'vitest'
 
-import { sanitizePageContent } from '../packages/core/src/sanitize'
+import { sanitizePageContent } from '../packages/core-ext/src/sanitize'
 
 describe('DOMPurify Direct', () => {
 	it('should strip script tags from HTML', () => {
