@@ -1,0 +1,15 @@
+{
+    "extends": "./tsconfig.base.json",
+    "references": [
+        { "path": "./packages/page-controller" },
+        { "path": "./packages/ui" },
+        { "path": "./packages/llms" },
+        { "path": "./packages/core" },
+        { "path": "./packages/mirror" },
+        { "path": "./packages/page-agent" },
+        { "path": "./packages/extension/tsconfig.typecheck.json" },
+        { "path": "./packages/website" }
+    ],
+    "include": [],
+    "exclude": ["node_modules", "dist", "packages/*/dist"]
+}

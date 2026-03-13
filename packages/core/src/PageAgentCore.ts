@@ -176,7 +176,7 @@ export class PageAgentCore extends EventTarget {
 	}
 
 	/**
-	 * Push a observation message to the history event stream.
+	 * Push an observation message to the history event stream.
 	 * This will be visible in <agent_history> and remain persistent in memory across steps.
 	 * @experimental @internal
 	 * @note history change will be emitted before next step starts
@@ -343,7 +343,12 @@ export class PageAgentCore extends EventTarget {
 				return result
 			}
 
-			await waitFor(0.4) // @TODO: configurable
+			// Use chameleon jittered delay if available, otherwise minimal delay
+			if (this.chameleon?.isActive) {
+				await this.chameleon.jitteredDelay(150)
+			} else {
+				await waitFor(0.15)
+			}
 		}
 	}
 
