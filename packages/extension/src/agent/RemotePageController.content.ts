@@ -4,7 +4,12 @@
  */
 import { PageController } from '@page-agent/page-controller'
 
-import { ACTION_TO_METHOD, type PageControlAction } from './page-control-protocol'
+import {
+	ACTION_TO_METHOD,
+	type PageControlAction,
+	isPageControlAction,
+	validatePageControlPayload,
+} from './page-control-protocol'
 
 export function initPageController() {
 	let pageController: PageController | null = null
@@ -58,8 +63,7 @@ export function initPageController() {
 
 	/**
 	 * Dispatch a PAGE_CONTROL action to the local PageController.
-	 * This is a trust boundary — the message payload is validated by action name
-	 * (known set from ACTION_TO_METHOD) but args are not re-validated at runtime.
+	 * This is a trust boundary; action and payload are validated before dispatch.
 	 */
 	function dispatch(
 		pc: PageController,
@@ -71,32 +75,45 @@ export function initPageController() {
 		return fn.apply(pc, payload || [])
 	}
 
-	chrome.runtime.onMessage.addListener((message, sender, sendResponse): true | undefined => {
-		if (message.type !== 'PAGE_CONTROL') {
-			return
-		}
+	chrome.runtime.onMessage.addListener(
+		(message: unknown, _sender, sendResponse): true | undefined => {
+			if (typeof message !== 'object' || message === null) {
+				return
+			}
+			if ((message as { type?: unknown }).type !== 'PAGE_CONTROL') return
 
-		const { action, payload } = message as { action: string; payload?: any[] }
+			const action = (message as { action?: unknown }).action
+			const payload = (message as { payload?: unknown[] }).payload
 
-		// Validate action is known
-		if (!(action in ACTION_TO_METHOD)) {
-			sendResponse({
-				success: false,
-				error: `Unknown PAGE_CONTROL action: ${action}`,
-			})
-			return
-		}
-
-		const pc = getPC()
-		dispatch(pc, action as PageControlAction, payload)
-			.then((result) => sendResponse(result))
-			.catch((error) =>
+			// Validate action is known
+			if (typeof action !== 'string' || !isPageControlAction(action)) {
+				sendResponse({
+					success: false,
+					error: `Unknown PAGE_CONTROL action: ${action}`,
+				})
+				return
+			}
+			try {
+				validatePageControlPayload(action, payload)
+			} catch (error) {
 				sendResponse({
 					success: false,
 					error: error instanceof Error ? error.message : String(error),
 				})
-			)
+				return
+			}
 
-		return true
-	})
+			const pc = getPC()
+			dispatch(pc, action, payload)
+				.then((result) => sendResponse(result))
+				.catch((error) =>
+					sendResponse({
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					})
+				)
+
+			return true
+		}
+	)
 }

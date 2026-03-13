@@ -1,5 +1,7 @@
 import { handlePageControlMessage } from '@/agent/RemotePageController.background'
 import { handleTabControlMessage, setupTabChangeEvents } from '@/agent/TabsController.background'
+import { isPageControlMessage } from '@/agent/page-control-protocol'
+import { isTabControlMessage } from '@/agent/tab-control-protocol'
 import { initMemoryBackground } from '@/lib/memory-background'
 
 export default defineBackground(() => {
@@ -24,15 +26,23 @@ export default defineBackground(() => {
 
 	// message proxy — memory messages are handled by initMemoryBackground's own listener
 
-	chrome.runtime.onMessage.addListener((message, sender, sendResponse): true | undefined => {
-		if (message.type === 'TAB_CONTROL') {
-			return handleTabControlMessage(message, sender, sendResponse)
-		} else if (message.type === 'PAGE_CONTROL') {
-			return handlePageControlMessage(message, sender, sendResponse)
+	chrome.runtime.onMessage.addListener(
+		(message: unknown, sender, sendResponse): true | undefined => {
+			if (isTabControlMessage(message)) {
+				return handleTabControlMessage(message, sender, sendResponse)
+			} else if (
+				isPageControlMessage(message) ||
+				(typeof message === 'object' &&
+					message !== null &&
+					(message as { type?: unknown }).type === 'PAGE_CONTROL' &&
+					(message as { action?: unknown }).action === 'get_my_tab_id')
+			) {
+				return handlePageControlMessage(message, sender, sendResponse)
+			}
+			// Unknown or memory messages (handled by memory listener) — no response needed
+			return undefined
 		}
-		// Unknown or memory messages (handled by memory listener) — no response needed
-		return undefined
-	})
+	)
 
 	// setup
 

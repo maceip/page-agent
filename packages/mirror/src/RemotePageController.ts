@@ -138,7 +138,7 @@ export class RemotePageController extends EventTarget implements IPageController
 		// Always check the hot layer — it may have received a push since our
 		// last applySnapshot() call.
 		const latestSnap = this.hotLayer.getLatestSnapshot()
-		if (latestSnap && latestSnap.seq !== this.snapshot?.seq) {
+		if (latestSnap && (!this.snapshot || latestSnap.seq > this.snapshot.seq)) {
 			this.applySnapshot(latestSnap)
 		}
 
