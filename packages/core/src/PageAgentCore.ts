@@ -343,7 +343,12 @@ export class PageAgentCore extends EventTarget {
 				return result
 			}
 
-			await waitFor(0.4) // @TODO: configurable
+			// Use chameleon jittered delay if available, otherwise minimal delay
+			if (this.chameleon?.isActive) {
+				await this.chameleon.jitteredDelay(150)
+			} else {
+				await waitFor(0.15)
+			}
 		}
 	}
 

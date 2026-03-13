@@ -18,6 +18,9 @@ export class SimulatorMask {
 	#targetCursorX = 0
 	#targetCursorY = 0
 
+	/** Speed factor for cursor easing (higher = faster). Range 0-1. */
+	#cursorSpeed = 0.35
+
 	constructor() {
 		this.wrapper.id = 'page-agent-runtime_simulator-mask'
 		this.wrapper.className = styles.wrapper
@@ -36,39 +39,11 @@ export class SimulatorMask {
 			console.warn('[SimulatorMask] Motion overlay unavailable:', e)
 		}
 
-		// Capture all mouse, keyboard, and wheel events
-		this.wrapper.addEventListener('click', (e) => {
-			e.stopPropagation()
-			e.preventDefault()
-		})
-		this.wrapper.addEventListener('mousedown', (e) => {
-			e.stopPropagation()
-			e.preventDefault()
-		})
-		this.wrapper.addEventListener('mouseup', (e) => {
-			e.stopPropagation()
-			e.preventDefault()
-		})
-		this.wrapper.addEventListener('mousemove', (e) => {
-			e.stopPropagation()
-			e.preventDefault()
-		})
-		this.wrapper.addEventListener('wheel', (e) => {
-			e.stopPropagation()
-			e.preventDefault()
-		})
-		this.wrapper.addEventListener('keydown', (e) => {
-			e.stopPropagation()
-			e.preventDefault()
-		})
-		this.wrapper.addEventListener('keyup', (e) => {
-			e.stopPropagation()
-			e.preventDefault()
-		})
+		// NOTE: No event blocking. The mask is purely visual.
+		// The user's mouse and keyboard remain fully functional.
 
 		// Create AI cursor
 		this.#createCursor()
-		// this.show()
 
 		document.body.appendChild(this.wrapper)
 
@@ -87,31 +62,43 @@ export class SimulatorMask {
 	#createCursor() {
 		this.#cursor.className = cursorStyles.cursor
 
-		// Create ripple effect container
+		// Glow trail (rendered behind cursor shape)
+		const glow = document.createElement('div')
+		glow.className = cursorStyles.cursorGlow
+		this.#cursor.appendChild(glow)
+
+		// Ripple effect container
 		const rippleContainer = document.createElement('div')
 		rippleContainer.className = cursorStyles.cursorRipple
 		this.#cursor.appendChild(rippleContainer)
 
-		// Create filling layer
+		// Filling layer
 		const fillingLayer = document.createElement('div')
 		fillingLayer.className = cursorStyles.cursorFilling
 		this.#cursor.appendChild(fillingLayer)
 
-		// Create border layer
+		// Border layer
 		const borderLayer = document.createElement('div')
 		borderLayer.className = cursorStyles.cursorBorder
 		this.#cursor.appendChild(borderLayer)
+
+		// "AI" label badge
+		const label = document.createElement('div')
+		label.className = cursorStyles.cursorLabel
+		label.textContent = 'AI'
+		this.#cursor.appendChild(label)
 
 		this.wrapper.appendChild(this.#cursor)
 	}
 
 	#moveCursorToTarget() {
-		const newX = this.#currentCursorX + (this.#targetCursorX - this.#currentCursorX) * 0.2
-		const newY = this.#currentCursorY + (this.#targetCursorY - this.#currentCursorY) * 0.2
+		const speed = this.#cursorSpeed
+		const newX = this.#currentCursorX + (this.#targetCursorX - this.#currentCursorX) * speed
+		const newY = this.#currentCursorY + (this.#targetCursorY - this.#currentCursorY) * speed
 
 		const xDistance = Math.abs(newX - this.#targetCursorX)
 		if (xDistance > 0) {
-			if (xDistance < 2) {
+			if (xDistance < 1) {
 				this.#currentCursorX = this.#targetCursorX
 			} else {
 				this.#currentCursorX = newX
@@ -121,7 +108,7 @@ export class SimulatorMask {
 
 		const yDistance = Math.abs(newY - this.#targetCursorY)
 		if (yDistance > 0) {
-			if (yDistance < 2) {
+			if (yDistance < 1) {
 				this.#currentCursorY = this.#targetCursorY
 			} else {
 				this.#currentCursorY = newY
@@ -139,6 +126,7 @@ export class SimulatorMask {
 
 	triggerClickAnimation() {
 		this.#cursor.classList.remove(cursorStyles.clicking)
+		this.#cursor.classList.remove(cursorStyles.idle)
 		// Force reflow to restart animation
 		void this.#cursor.offsetHeight
 		this.#cursor.classList.add(cursorStyles.clicking)
@@ -160,6 +148,9 @@ export class SimulatorMask {
 		this.#targetCursorY = this.#currentCursorY
 		this.#cursor.style.left = `${this.#currentCursorX}px`
 		this.#cursor.style.top = `${this.#currentCursorY}px`
+
+		// Start with idle breathing animation
+		this.#cursor.classList.add(cursorStyles.idle)
 	}
 
 	hide() {
@@ -170,6 +161,7 @@ export class SimulatorMask {
 		this.motion?.pause()
 
 		this.#cursor.classList.remove(cursorStyles.clicking)
+		this.#cursor.classList.remove(cursorStyles.idle)
 
 		setTimeout(() => {
 			this.wrapper.classList.remove(styles.visible)
