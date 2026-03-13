@@ -10,10 +10,11 @@ Performance here means: **fewer steps to complete tasks, higher task success rat
 
 ### S1 — Smarter DOM Pruning: Viewport-Aware + Relevance Scoring
 
-**Problem:** The current `flatTreeToString` sends *every* interactive element on the page to the LLM regardless of distance from the likely action target. On complex pages (dashboards, long forms, SPAs with hidden panels), this wastes 30–60% of the context window on elements the agent will never touch in the current step.
+**Problem:** The current `flatTreeToString` sends *every* interactive element on the page to the LLM by default (`DEFAULT_VIEWPORT_EXPANSION = -1`). A viewport-aware mode exists (`viewportExpansion` config), but even with it enabled there is no relevance scoring or element capping—every in-viewport element is included regardless of relevance. On complex pages (dashboards, long forms, SPAs with hidden panels), this wastes 30–60% of the context window on elements the agent will never touch in the current step.
 
 **Solution:**
-- Score each interactive element by (a) viewport proximity, (b) semantic similarity to the current `next_goal`/user request (cheap BM25 or TF-IDF over element text + attributes), and (c) recency (`isNew` flag).
+- Enable viewport filtering by default (switch `DEFAULT_VIEWPORT_EXPANSION` from `-1` to a sensible value like `500px`).
+- Score each interactive element by (a) viewport proximity, (b) semantic similarity to the current `next_goal`/user request (cheap BM25 or TF-IDF over element text + attributes), and (c) recency (`isNew` flag, which already exists and marks new elements with `*[index]`).
 - Hard-cap the simplified HTML to the top-K elements (e.g. 80) plus all elements within the visible viewport.
 - Include a `[... N more elements offscreen, scroll to reveal]` summary line so the LLM knows it can scroll.
 
@@ -40,7 +41,7 @@ Performance here means: **fewer steps to complete tasks, higher task success rat
 
 ### S3 — Action Result Enrichment
 
-**Problem:** Current action results are terse strings like `"✅ Clicked element at index 5"`. The LLM gets zero feedback about *what actually happened* on the page after the click (did a modal open? did the URL change? did new elements appear?). This forces the LLM to waste a full step just re-observing.
+**Problem:** Current action results include basic confirmations with element text labels (e.g., `"✅ Clicked element (Submit Button)"`, `"✅ Input text (hello) into element (Search Box)"`), but provide zero feedback about *what actually happened on the page* after the action (did a modal open? did the URL change? did new elements appear? did a validation error fire?). This forces the LLM to waste a full step just re-observing.
 
 **Solution:**
 - After each action, compute a concise diff: "3 new interactive elements appeared", "Modal overlay detected", "URL changed to /checkout", "Form field now shows validation error: 'Email required'".
@@ -154,15 +155,13 @@ Performance here means: **fewer steps to complete tasks, higher task success rat
 
 ### M5 — Intelligent Retry with Error Classification
 
-**Problem:** The current retry logic (`maxRetries=2`, flat 100ms delay) doesn't distinguish between transient errors (rate limit, network timeout) and permanent errors (invalid API key, model not found). It also doesn't adapt the *agent strategy* after errors.
+**Problem:** The current retry logic (`maxRetries=2`, flat 100ms delay) already classifies errors as retryable vs. non-retryable (AUTH_ERROR, CONTEXT_LENGTH, CONTENT_FILTER fail fast), but has two gaps: (1) the backoff is a flat 100ms regardless of error type—no exponential backoff for rate limits, no jitter—and (2) it doesn't adapt the *agent strategy* after errors (e.g., compressing context on overflow, switching models on repeated failures).
 
 **Solution:**
-- Classify LLM errors into categories: `rate_limit`, `context_overflow`, `invalid_response`, `network`, `auth`, `unknown`.
-- For `rate_limit`: exponential backoff with jitter (1s, 2s, 4s).
-- For `context_overflow`: trigger history compression (M3) and retry with reduced context.
-- For `invalid_response`: increment auto-fixer aggressiveness (try more normalization strategies).
-- For `auth`/permanent: fail fast, don't waste retries.
-- Expose error classification to the agent loop so it can adapt (e.g., switch to a fallback model via LLMRouter).
+- For `rate_limit`: upgrade to exponential backoff with jitter (1s, 2s, 4s) instead of flat 100ms.
+- For `context_overflow`: trigger history compression (M3) and retry with reduced context, instead of failing immediately.
+- For `invalid_response`: increment auto-fixer aggressiveness (try more normalization strategies in `normalizeResponse`).
+- Expose error classification to the agent loop so it can adapt strategy (e.g., switch to a fallback model via LLMRouter, reduce DOM payload on context overflow).
 
 **Impact:** Dramatically improves reliability in production environments with rate limits and flaky networks. Turns ~30% of current hard failures into recoverable situations.
 
@@ -306,7 +305,7 @@ Performance here means: **fewer steps to complete tasks, higher task success rat
 
 | Project | Level of Effort | Impact | Confidence: Will It Work? | Confidence: Meaningful Perf Impact? | Priority |
 |---------|----------------|--------|--------------------------|-------------------------------------|----------|
-| S1 — DOM Pruning | S (1–2 days) | High — 30–50% token reduction per step | **Very High** — straightforward filtering, no novel risk | **High** — proven technique in other agents (WebArena, SeeAct); direct token savings measurable immediately | P0 — Do first |
+| S1 — DOM Pruning | S (2–3 days) | High — 30–50% token reduction per step | **Very High** — viewport filtering already exists (opt-in); main work is relevance scoring + capping | **High** — proven technique in other agents (WebArena, SeeAct); direct token savings measurable immediately | P0 — Do first |
 | S3 — Action Result Enrichment | S (2–3 days) | High — 15–25% fewer total steps | **Very High** — DOM diffing is deterministic; no LLM dependency for the diff itself | **High** — reduces wasted "observe-only" steps; effect scales with task complexity | P0 — Do first |
 | S5 — Loop Detection | S (1–2 days) | High — eliminates #1 cause of max-step failures | **Very High** — simple heuristic (action+hash dedup), zero technical risk | **High** — directly prevents the most common failure mode; 10–20% success rate uplift on stuck tasks | P0 — Do first |
 | S2 — Adaptive Delays | S (2–3 days) | Medium — 40–70% wall-clock reduction | **High** — MutationObserver + network idle detection are well-understood browser APIs | **Medium** — big latency win, but doesn't improve success rate or token cost; mainly UX | P1 |
@@ -315,7 +314,7 @@ Performance here means: **fewer steps to complete tasks, higher task success rat
 | M4 — Keyboard Actions | M (3–5 days) | High — unlocks entire failing task categories | **Very High** — dispatching KeyboardEvents is well-understood; clear implementation path | **Very High** — "press Enter to submit search" is the single most common missing capability; immediate unblock | P0 — Do first |
 | M2 — Semantic Targeting | M (5–7 days) | High — 10–15% success rate on SPAs | **High** — fuzzy matching on element signatures is proven (Playwright locators use similar); main risk is false-positive matches | **Medium-High** — helps on dynamic pages, but index staleness may not be the primary failure mode in practice; needs measurement | P1 |
 | M3 — History Compression | M (5–7 days) | High — enables 40+ step tasks | **High** — sliding-window summarization is a known technique; template-based compression is low-risk | **Medium-High** — critical for long tasks, but most current tasks complete in <15 steps where history isn't the bottleneck | P1 |
-| M5 — Intelligent Retry | M (3–5 days) | Medium — recovers ~30% of hard failures | **High** — error classification is deterministic; backoff strategies are well-proven | **Medium** — most failures are agent logic errors, not LLM API errors; helps in production but doesn't move benchmarks | P2 |
+| M5 — Intelligent Retry | M (3–5 days) | Medium — recovers ~30% of hard failures | **High** — error classification already exists (retryable vs non-retryable); main work is upgrading backoff + adding agent-level adaptation | **Medium** — most failures are agent logic errors, not LLM API errors; helps in production but doesn't move benchmarks | P2 |
 | L2 — Visual Grounding | L (2–3 weeks) | Very High — 15–30% accuracy on complex pages | **Medium** — requires multimodal LLM; bounding-box overlay rendering + image encoding adds complexity; screenshot quality varies | **High** — strong evidence from vision-based agents (SeeAct, WebVoyager) that visual grounding closes the gap on layout-dependent tasks | P0 |
 | L1 — Multi-Tab | L (2–3 weeks) | High — new task category | **Medium** — chrome extension messaging is fragile; coordinating multiple agent instances is architecturally complex; race conditions likely | **Medium** — unlocks new use cases but most benchmarks are single-page; competitive differentiator more than perf metric | P1 |
 | L3 — Trajectory Learning | L (2–3 weeks) | High — continuous improvement | **Low-Medium** — requires trajectory collection pipeline, clustering, and prompt distillation; cold-start problem; quality depends on user volume | **Medium** — long-term compounding value, but initial iterations may show modest gains; 3+ release cycles to realize full benefit | P2 |
