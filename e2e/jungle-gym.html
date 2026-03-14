@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Acme Cloud — Dashboard</title>
+	<style>
+		* { margin: 0; padding: 0; box-sizing: border-box; }
+		body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; }
+
+		/* ── Top nav ── */
+		.topbar { display: flex; align-items: center; justify-content: space-between; padding: 0 20px; height: 56px; background: #1e293b; border-bottom: 1px solid #334155; }
+		.topbar-brand { font-weight: 700; font-size: 18px; color: #38bdf8; }
+		.topbar-nav { display: flex; gap: 16px; align-items: center; }
+		.topbar-nav a { color: #94a3b8; text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 6px; }
+		.topbar-nav a:hover, .topbar-nav a.active { background: #334155; color: #f1f5f9; }
+		.topbar-user { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 4px 10px; border-radius: 6px; }
+		.topbar-user:hover { background: #334155; }
+		.avatar { width: 32px; height: 32px; border-radius: 50%; background: #6366f1; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: white; }
+
+		/* ── Layout ── */
+		.layout { display: flex; min-height: calc(100vh - 56px); }
+
+		/* ── Sidebar ── */
+		.sidebar { width: 220px; background: #1e293b; border-right: 1px solid #334155; padding: 16px 0; flex-shrink: 0; }
+		.sidebar-section { padding: 8px 16px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-top: 12px; }
+		.sidebar a { display: flex; align-items: center; gap: 8px; padding: 8px 16px; color: #94a3b8; text-decoration: none; font-size: 14px; }
+		.sidebar a:hover, .sidebar a.active { background: #334155; color: #f1f5f9; }
+		.sidebar a .icon { width: 16px; text-align: center; font-size: 14px; }
+
+		/* ── Main content ── */
+		.main { flex: 1; padding: 32px; overflow-y: auto; }
+		.main h1 { font-size: 24px; font-weight: 600; margin-bottom: 8px; }
+		.main .subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 24px; }
+
+		/* ── Dashboard cards ── */
+		.dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 32px; }
+		.card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
+		.card-title { font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+		.card-value { font-size: 28px; font-weight: 700; }
+		.card-change { font-size: 12px; margin-top: 4px; }
+		.card-change.positive { color: #4ade80; }
+		.card-change.negative { color: #f87171; }
+
+		/* ── Page content areas ── */
+		.page { display: none; }
+		.page.active { display: block; }
+
+		/* ── Settings ── */
+		.settings-grid { display: grid; grid-template-columns: 200px 1fr; gap: 0; background: #1e293b; border: 1px solid #334155; border-radius: 12px; overflow: hidden; min-height: 500px; }
+		.settings-nav { border-right: 1px solid #334155; padding: 8px 0; }
+		.settings-nav a { display: block; padding: 10px 16px; color: #94a3b8; text-decoration: none; font-size: 14px; border-left: 3px solid transparent; }
+		.settings-nav a:hover { background: #334155; color: #f1f5f9; }
+		.settings-nav a.active { border-left-color: #6366f1; color: #f1f5f9; background: rgba(99,102,241,0.1); }
+		.settings-content { padding: 24px; }
+		.settings-content h2 { font-size: 18px; margin-bottom: 16px; }
+
+		/* ── Form elements ── */
+		.form-group { margin-bottom: 20px; }
+		.form-group label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; }
+		.form-group input, .form-group select, .form-group textarea { width: 100%; max-width: 400px; padding: 10px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 14px; }
+		.form-group input:focus, .form-group select:focus { outline: none; border-color: #6366f1; }
+		.btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 500; }
+		.btn-primary { background: #6366f1; color: white; }
+		.btn-primary:hover { background: #4f46e5; }
+		.btn-secondary { background: #334155; color: #e2e8f0; }
+		.btn-secondary:hover { background: #475569; }
+		.btn-danger { background: #dc2626; color: white; }
+		.btn-danger:hover { background: #b91c1c; }
+		.btn-sm { padding: 6px 14px; font-size: 13px; }
+
+		/* ── Passkey specific ── */
+		.passkey-list { margin-top: 16px; }
+		.passkey-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; margin-bottom: 8px; }
+		.passkey-info { display: flex; align-items: center; gap: 12px; }
+		.passkey-icon { font-size: 20px; }
+		.passkey-name { font-size: 14px; font-weight: 500; }
+		.passkey-meta { font-size: 12px; color: #64748b; }
+
+		/* ── Modal ── */
+		.modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center; }
+		.modal-backdrop.open { display: flex; }
+		.modal { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; max-width: 480px; width: 90%; }
+		.modal h3 { font-size: 18px; margin-bottom: 4px; }
+		.modal .modal-subtitle { font-size: 13px; color: #94a3b8; margin-bottom: 20px; }
+		.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+		/* ── Alert / toast ── */
+		.toast { position: fixed; bottom: 24px; right: 24px; background: #065f46; color: #d1fae5; padding: 12px 20px; border-radius: 8px; font-size: 14px; display: none; z-index: 200; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+		.toast.show { display: block; }
+
+		/* ── Security section styling ── */
+		.security-section { margin-bottom: 24px; padding: 16px; background: rgba(99,102,241,0.05); border: 1px solid #334155; border-radius: 8px; }
+		.security-section h3 { font-size: 15px; margin-bottom: 8px; }
+		.security-section p { font-size: 13px; color: #94a3b8; margin-bottom: 12px; }
+		.security-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+		.badge-enabled { background: rgba(74,222,128,0.15); color: #4ade80; }
+		.badge-disabled { background: rgba(248,113,113,0.15); color: #f87171; }
+
+		/* ── Dropdown menu (user menu) ── */
+		.dropdown { position: relative; }
+		.dropdown-menu { display: none; position: absolute; top: 100%; right: 0; background: #1e293b; border: 1px solid #334155; border-radius: 8px; min-width: 180px; z-index: 50; margin-top: 4px; padding: 4px 0; box-shadow: 0 8px 16px rgba(0,0,0,0.3); }
+		.dropdown-menu.open { display: block; }
+		.dropdown-menu a { display: block; padding: 8px 16px; color: #94a3b8; text-decoration: none; font-size: 14px; }
+		.dropdown-menu a:hover { background: #334155; color: #f1f5f9; }
+		.dropdown-menu hr { border: none; border-top: 1px solid #334155; margin: 4px 0; }
+
+		/* ── Table ── */
+		.data-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+		.data-table th, .data-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #334155; font-size: 14px; }
+		.data-table th { color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+	</style>
+</head>
+<body>
+
+<!-- ═══════════════════ TOP BAR ═══════════════════ -->
+<div class="topbar">
+	<div class="topbar-brand">☁ Acme Cloud</div>
+	<div class="topbar-nav">
+		<a href="#" data-pa-id="1" data-page="dashboard" class="active">Dashboard</a>
+		<a href="#" data-pa-id="2" data-page="projects">Projects</a>
+		<a href="#" data-pa-id="3" data-page="billing">Billing</a>
+		<a href="#" data-pa-id="4" data-page="docs">Docs</a>
+	</div>
+	<div class="dropdown">
+		<div class="topbar-user" data-pa-id="5" id="user-menu-trigger">
+			<div class="avatar">JD</div>
+			<span style="font-size:14px">Jane Doe</span>
+			<span style="font-size:10px;color:#64748b">▼</span>
+		</div>
+		<div class="dropdown-menu" id="user-dropdown">
+			<a href="#" data-pa-id="6" data-page="profile">Profile</a>
+			<a href="#" data-pa-id="7" data-page="settings">Account Settings</a>
+			<a href="#" data-pa-id="8">Preferences</a>
+			<hr />
+			<a href="#" data-pa-id="9">Sign Out</a>
+		</div>
+	</div>
+</div>
+
+<!-- ═══════════════════ LAYOUT ═══════════════════ -->
+<div class="layout">
+
+	<!-- Sidebar -->
+	<div class="sidebar" id="main-sidebar">
+		<div class="sidebar-section">Main</div>
+		<a href="#" data-pa-id="10" data-page="dashboard" class="active"><span class="icon">📊</span> Overview</a>
+		<a href="#" data-pa-id="11" data-page="projects"><span class="icon">📁</span> Projects</a>
+		<a href="#" data-pa-id="12" data-page="team"><span class="icon">👥</span> Team</a>
+		<a href="#" data-pa-id="13" data-page="billing"><span class="icon">💳</span> Billing</a>
+
+		<div class="sidebar-section">Resources</div>
+		<a href="#" data-pa-id="14" data-page="docs"><span class="icon">📄</span> Documentation</a>
+		<a href="#" data-pa-id="15"><span class="icon">💬</span> Support</a>
+		<a href="#" data-pa-id="16"><span class="icon">📢</span> Changelog</a>
+	</div>
+
+	<!-- Main content -->
+	<div class="main">
+
+		<!-- ═══════ DASHBOARD PAGE ═══════ -->
+		<div class="page active" id="page-dashboard">
+			<h1>Dashboard</h1>
+			<p class="subtitle">Welcome back, Jane. Here's what's happening.</p>
+			<div class="dashboard-grid">
+				<div class="card">
+					<div class="card-title">Active Projects</div>
+					<div class="card-value">12</div>
+					<div class="card-change positive">↑ 2 this month</div>
+				</div>
+				<div class="card">
+					<div class="card-title">Team Members</div>
+					<div class="card-value">8</div>
+					<div class="card-change positive">↑ 1 this week</div>
+				</div>
+				<div class="card">
+					<div class="card-title">API Calls (30d)</div>
+					<div class="card-value">847K</div>
+					<div class="card-change negative">↓ 3.2%</div>
+				</div>
+				<div class="card">
+					<div class="card-title">Storage Used</div>
+					<div class="card-value">64 GB</div>
+					<div class="card-change positive">73% of quota</div>
+				</div>
+			</div>
+			<h2 style="margin-bottom:12px">Recent Activity</h2>
+			<table class="data-table">
+				<thead><tr><th>Event</th><th>Project</th><th>User</th><th>Time</th></tr></thead>
+				<tbody>
+					<tr><td>Deploy completed</td><td>frontend-v3</td><td>Jane D.</td><td>2 min ago</td></tr>
+					<tr><td>PR merged</td><td>api-service</td><td>Bob K.</td><td>15 min ago</td></tr>
+					<tr><td>Issue created</td><td>mobile-app</td><td>Alice M.</td><td>1 hour ago</td></tr>
+					<tr><td>Pipeline failed</td><td>data-pipeline</td><td>Jane D.</td><td>3 hours ago</td></tr>
+				</tbody>
+			</table>
+		</div>
+
+		<!-- ═══════ PROJECTS PAGE ═══════ -->
+		<div class="page" id="page-projects">
+			<h1>Projects</h1>
+			<p class="subtitle">Manage your projects and deployments.</p>
+			<div class="dashboard-grid">
+				<div class="card"><div class="card-title">frontend-v3</div><div class="card-value" style="font-size:16px">Production</div><div class="card-change positive">Last deploy: 2 min ago</div></div>
+				<div class="card"><div class="card-title">api-service</div><div class="card-value" style="font-size:16px">Staging</div><div class="card-change">Last deploy: 1h ago</div></div>
+				<div class="card"><div class="card-title">mobile-app</div><div class="card-value" style="font-size:16px">Development</div><div class="card-change negative">Build failing</div></div>
+			</div>
+		</div>
+
+		<!-- ═══════ BILLING PAGE ═══════ -->
+		<div class="page" id="page-billing">
+			<h1>Billing</h1>
+			<p class="subtitle">Manage your subscription and payment methods.</p>
+			<div class="card" style="max-width:500px">
+				<div class="card-title">Current Plan</div>
+				<div class="card-value" style="font-size:20px">Team Pro — $49/mo</div>
+				<div class="card-change">Next billing: Apr 1, 2026</div>
+				<button class="btn btn-secondary btn-sm" style="margin-top:12px" data-pa-id="20">Change Plan</button>
+			</div>
+		</div>
+
+		<!-- ═══════ PROFILE PAGE ═══════ -->
+		<div class="page" id="page-profile">
+			<h1>Profile</h1>
+			<p class="subtitle">Your public profile information.</p>
+			<div class="form-group">
+				<label for="profile-name">Display Name</label>
+				<input id="profile-name" data-pa-id="21" type="text" value="Jane Doe" />
+			</div>
+			<div class="form-group">
+				<label for="profile-email">Email</label>
+				<input id="profile-email" data-pa-id="22" type="email" value="jane@acmecloud.dev" />
+			</div>
+			<button class="btn btn-primary" data-pa-id="23">Save Changes</button>
+		</div>
+
+		<!-- ═══════ DOCS PAGE ═══════ -->
+		<div class="page" id="page-docs">
+			<h1>Documentation</h1>
+			<p class="subtitle">Learn how to use Acme Cloud.</p>
+			<div class="form-group">
+				<input type="search" placeholder="Search docs..." data-pa-id="24" />
+			</div>
+			<div class="card"><div class="card-title">Getting Started</div><p style="font-size:14px;color:#94a3b8;margin-top:8px">Set up your first project in 5 minutes.</p></div>
+		</div>
+
+		<!-- ═══════ TEAM PAGE ═══════ -->
+		<div class="page" id="page-team">
+			<h1>Team</h1>
+			<p class="subtitle">Manage team members and roles.</p>
+			<table class="data-table">
+				<thead><tr><th>Member</th><th>Role</th><th>Status</th></tr></thead>
+				<tbody>
+					<tr><td>Jane Doe</td><td>Owner</td><td>Active</td></tr>
+					<tr><td>Bob Kim</td><td>Admin</td><td>Active</td></tr>
+					<tr><td>Alice Martinez</td><td>Developer</td><td>Active</td></tr>
+				</tbody>
+			</table>
+		</div>
+
+		<!-- ═══════ SETTINGS PAGE (contains buried passkey) ═══════ -->
+		<div class="page" id="page-settings">
+			<h1>Account Settings</h1>
+			<p class="subtitle">Manage your account preferences and security.</p>
+
+			<div class="settings-grid">
+				<!-- Settings sidebar -->
+				<div class="settings-nav" id="settings-nav">
+					<a href="#" data-pa-id="30" data-settings-tab="general" class="active">General</a>
+					<a href="#" data-pa-id="31" data-settings-tab="notifications">Notifications</a>
+					<a href="#" data-pa-id="32" data-settings-tab="security">Security</a>
+					<a href="#" data-pa-id="33" data-settings-tab="api-keys">API Keys</a>
+					<a href="#" data-pa-id="34" data-settings-tab="danger">Danger Zone</a>
+				</div>
+
+				<!-- Settings content -->
+				<div class="settings-content" id="settings-content">
+
+					<!-- General tab -->
+					<div class="settings-tab active" id="tab-general">
+						<h2>General Settings</h2>
+						<div class="form-group">
+							<label for="settings-timezone">Timezone</label>
+							<select id="settings-timezone" data-pa-id="35">
+								<option>UTC</option>
+								<option selected>America/Los_Angeles</option>
+								<option>America/New_York</option>
+								<option>Europe/London</option>
+								<option>Asia/Tokyo</option>
+							</select>
+						</div>
+						<div class="form-group">
+							<label for="settings-lang">Language</label>
+							<select id="settings-lang" data-pa-id="36">
+								<option selected>English</option>
+								<option>Spanish</option>
+								<option>Japanese</option>
+							</select>
+						</div>
+						<button class="btn btn-primary" data-pa-id="37">Save</button>
+					</div>
+
+					<!-- Notifications tab -->
+					<div class="settings-tab" id="tab-notifications" style="display:none">
+						<h2>Notification Preferences</h2>
+						<div class="form-group">
+							<label><input type="checkbox" checked data-pa-id="38" /> Email notifications for deploys</label>
+						</div>
+						<div class="form-group">
+							<label><input type="checkbox" checked data-pa-id="39" /> Slack notifications for errors</label>
+						</div>
+						<div class="form-group">
+							<label><input type="checkbox" data-pa-id="40" /> Weekly digest</label>
+						</div>
+						<button class="btn btn-primary" data-pa-id="41">Save</button>
+					</div>
+
+					<!-- ═══════ SECURITY TAB (passkeys live here, buried) ═══════ -->
+					<div class="settings-tab" id="tab-security" style="display:none">
+						<h2>Security</h2>
+
+						<div class="security-section">
+							<h3>Password</h3>
+							<p>Last changed 32 days ago.</p>
+							<button class="btn btn-secondary btn-sm" data-pa-id="42">Change Password</button>
+						</div>
+
+						<div class="security-section">
+							<h3>Two-Factor Authentication</h3>
+							<p>
+								Status: <span class="security-badge badge-enabled">Enabled</span>
+							</p>
+							<p>Authenticator app configured. Recovery codes downloaded.</p>
+							<button class="btn btn-secondary btn-sm" data-pa-id="43">Manage 2FA</button>
+						</div>
+
+						<div class="security-section">
+							<h3>Active Sessions</h3>
+							<p>You have 3 active sessions. <a href="#" data-pa-id="44" style="color:#6366f1">View all sessions</a></p>
+						</div>
+
+						<!-- ═══ PASSKEYS — intentionally last, easy to miss ═══ -->
+						<div class="security-section" id="passkey-section">
+							<h3>Passkeys</h3>
+							<p>Use biometrics or a security key for passwordless sign-in. Passkeys are phishing-resistant and work across your devices.</p>
+
+							<div class="passkey-list" id="passkey-list">
+								<!-- Populated dynamically -->
+							</div>
+
+							<button class="btn btn-primary btn-sm" data-pa-id="50" id="add-passkey-btn" style="margin-top:12px">
+								+ Add a Passkey
+							</button>
+						</div>
+
+						<div class="security-section">
+							<h3>Login History</h3>
+							<p>Last login: Today, 10:32 AM from San Francisco, CA</p>
+							<a href="#" data-pa-id="45" style="color:#6366f1;font-size:13px">View full login history →</a>
+						</div>
+					</div>
+
+					<!-- API Keys tab -->
+					<div class="settings-tab" id="tab-api-keys" style="display:none">
+						<h2>API Keys</h2>
+						<p style="color:#94a3b8;font-size:14px;margin-bottom:16px">Manage your API keys for programmatic access.</p>
+						<table class="data-table">
+							<thead><tr><th>Name</th><th>Key</th><th>Created</th></tr></thead>
+							<tbody>
+								<tr><td>Production</td><td><code>sk_live_...x4Kp</code></td><td>Jan 15, 2026</td></tr>
+								<tr><td>Development</td><td><code>sk_test_...m2Rq</code></td><td>Dec 3, 2025</td></tr>
+							</tbody>
+						</table>
+						<button class="btn btn-primary btn-sm" data-pa-id="46" style="margin-top:12px">Generate New Key</button>
+					</div>
+
+					<!-- Danger Zone tab -->
+					<div class="settings-tab" id="tab-danger" style="display:none">
+						<h2>Danger Zone</h2>
+						<div class="security-section" style="border-color:#dc2626">
+							<h3 style="color:#f87171">Delete Account</h3>
+							<p>This action is irreversible. All data will be permanently deleted.</p>
+							<button class="btn btn-danger btn-sm" data-pa-id="47">Delete My Account</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+	</div><!-- /main -->
+</div><!-- /layout -->
+
+<!-- ═══════ PASSKEY REGISTRATION MODAL ═══════ -->
+<div class="modal-backdrop" id="passkey-modal">
+	<div class="modal" role="dialog" aria-label="Register a new passkey">
+		<h3>Add a Passkey</h3>
+		<p class="modal-subtitle">Create a passkey to sign in without a password. Your device will prompt you for biometrics or a PIN.</p>
+
+		<div id="passkey-step-1">
+			<div class="form-group">
+				<label for="passkey-name-input">Passkey Name</label>
+				<input id="passkey-name-input" data-pa-id="51" type="text" placeholder="e.g. MacBook Pro, iPhone, YubiKey" />
+			</div>
+			<div class="modal-actions">
+				<button class="btn btn-secondary" data-pa-id="52" id="passkey-cancel-btn">Cancel</button>
+				<button class="btn btn-primary" data-pa-id="53" id="passkey-register-btn">Register Passkey</button>
+			</div>
+		</div>
+
+		<div id="passkey-step-2" style="display:none">
+			<div style="text-align:center;padding:24px 0">
+				<div style="font-size:48px;margin-bottom:12px">🔐</div>
+				<p style="font-size:14px;color:#94a3b8" id="passkey-status-text">Waiting for authenticator...</p>
+			</div>
+		</div>
+
+		<div id="passkey-step-3" style="display:none">
+			<div style="text-align:center;padding:24px 0">
+				<div style="font-size:48px;margin-bottom:12px">✅</div>
+				<p style="font-size:16px;font-weight:600" id="passkey-success-name">Passkey registered!</p>
+				<p style="font-size:13px;color:#94a3b8;margin-top:8px">You can now use this passkey to sign in.</p>
+			</div>
+			<div class="modal-actions">
+				<button class="btn btn-primary" data-pa-id="54" id="passkey-done-btn">Done</button>
+			</div>
+		</div>
+	</div>
+</div>
+
+<!-- ═══════ TOAST ═══════ -->
+<div class="toast" id="toast"></div>
+
+<script>
+	// ═══════════════════════════════════════════════════════════════
+	// Navigation: top nav + sidebar + settings tabs
+	// ═══════════════════════════════════════════════════════════════
+
+	function navigateTo(pageName) {
+		// Hide all pages, show target
+		document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
+		const target = document.getElementById('page-' + pageName)
+		if (target) target.classList.add('active')
+
+		// Update nav active states
+		document.querySelectorAll('.topbar-nav a').forEach(a => a.classList.toggle('active', a.dataset.page === pageName))
+		document.querySelectorAll('.sidebar a').forEach(a => a.classList.toggle('active', a.dataset.page === pageName))
+	}
+
+	// Top nav clicks
+	document.querySelectorAll('[data-page]').forEach(el => {
+		el.addEventListener('click', (e) => {
+			e.preventDefault()
+			navigateTo(el.dataset.page)
+			// Close dropdown if open
+			document.getElementById('user-dropdown').classList.remove('open')
+		})
+	})
+
+	// User dropdown toggle
+	document.getElementById('user-menu-trigger').addEventListener('click', (e) => {
+		e.stopPropagation()
+		document.getElementById('user-dropdown').classList.toggle('open')
+	})
+	document.addEventListener('click', () => {
+		document.getElementById('user-dropdown').classList.remove('open')
+	})
+
+	// Settings tabs
+	document.querySelectorAll('[data-settings-tab]').forEach(el => {
+		el.addEventListener('click', (e) => {
+			e.preventDefault()
+			const tab = el.dataset.settingsTab
+
+			// Update active nav
+			document.querySelectorAll('#settings-nav a').forEach(a => a.classList.toggle('active', a.dataset.settingsTab === tab))
+
+			// Show target tab
+			document.querySelectorAll('.settings-tab').forEach(t => t.style.display = 'none')
+			const target = document.getElementById('tab-' + tab)
+			if (target) target.style.display = 'block'
+		})
+	})
+
+	// ═══════════════════════════════════════════════════════════════
+	// Passkey management
+	// ═══════════════════════════════════════════════════════════════
+
+	const registeredPasskeys = []
+
+	function renderPasskeys() {
+		const list = document.getElementById('passkey-list')
+		if (registeredPasskeys.length === 0) {
+			list.innerHTML = '<p style="font-size:13px;color:#64748b;font-style:italic">No passkeys registered yet.</p>'
+			return
+		}
+		list.innerHTML = registeredPasskeys.map((pk, i) => `
+			<div class="passkey-item">
+				<div class="passkey-info">
+					<span class="passkey-icon">🔑</span>
+					<div>
+						<div class="passkey-name">${pk.name}</div>
+						<div class="passkey-meta">Added ${pk.createdAt} · Last used: ${pk.lastUsed || 'Never'}</div>
+					</div>
+				</div>
+				<button class="btn btn-secondary btn-sm" data-pa-id="${60 + i}" onclick="removePasskey(${i})">Remove</button>
+			</div>
+		`).join('')
+	}
+
+	function removePasskey(index) {
+		registeredPasskeys.splice(index, 1)
+		renderPasskeys()
+		showToast('Passkey removed')
+	}
+
+	// Open modal
+	document.getElementById('add-passkey-btn').addEventListener('click', () => {
+		document.getElementById('passkey-modal').classList.add('open')
+		document.getElementById('passkey-step-1').style.display = 'block'
+		document.getElementById('passkey-step-2').style.display = 'none'
+		document.getElementById('passkey-step-3').style.display = 'none'
+		document.getElementById('passkey-name-input').value = ''
+		document.getElementById('passkey-name-input').focus()
+	})
+
+	// Cancel
+	document.getElementById('passkey-cancel-btn').addEventListener('click', () => {
+		document.getElementById('passkey-modal').classList.remove('open')
+	})
+
+	// Escape to close modal
+	document.addEventListener('keydown', (e) => {
+		if (e.key === 'Escape') {
+			document.getElementById('passkey-modal').classList.remove('open')
+		}
+	})
+
+	// Register passkey
+	document.getElementById('passkey-register-btn').addEventListener('click', async () => {
+		const nameInput = document.getElementById('passkey-name-input')
+		const name = nameInput.value.trim()
+		if (!name) {
+			nameInput.style.borderColor = '#dc2626'
+			nameInput.placeholder = 'Please enter a name for your passkey'
+			return
+		}
+
+		// Step 2: show authenticator prompt
+		document.getElementById('passkey-step-1').style.display = 'none'
+		document.getElementById('passkey-step-2').style.display = 'block'
+
+		try {
+			// Actually call the WebAuthn API
+			const credential = await navigator.credentials.create({
+				publicKey: {
+					challenge: crypto.getRandomValues(new Uint8Array(32)),
+					rp: { name: 'Acme Cloud', id: location.hostname || 'localhost' },
+					user: {
+						id: new TextEncoder().encode('jane-doe-acme-001'),
+						name: 'jane@acmecloud.dev',
+						displayName: 'Jane Doe',
+					},
+					pubKeyCredParams: [
+						{ alg: -7, type: 'public-key' },   // ES256
+						{ alg: -257, type: 'public-key' }, // RS256
+					],
+					authenticatorSelection: {
+						authenticatorAttachment: 'platform',
+						residentKey: 'required',
+						userVerification: 'required',
+					},
+					timeout: 60000,
+					attestation: 'none',
+				},
+			})
+
+			if (!credential) throw new Error('No credential returned')
+
+			// Store the passkey reference
+			const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)))
+			registeredPasskeys.push({
+				name,
+				credentialId: credId,
+				createdAt: new Date().toLocaleDateString(),
+				lastUsed: null,
+				type: credential.type,
+			})
+
+			// Step 3: success
+			document.getElementById('passkey-step-2').style.display = 'none'
+			document.getElementById('passkey-step-3').style.display = 'block'
+			document.getElementById('passkey-success-name').textContent = `"${name}" registered!`
+			renderPasskeys()
+
+		} catch (err) {
+			// Handle WebAuthn failure (user cancelled, not supported, etc.)
+			document.getElementById('passkey-status-text').textContent =
+				'Authenticator error: ' + (err.message || 'Unknown error')
+
+			// Simulate fallback success after 1s for testing environments without real authenticators
+			setTimeout(() => {
+				const credId = btoa(String(Date.now()))
+				registeredPasskeys.push({
+					name,
+					credentialId: credId,
+					createdAt: new Date().toLocaleDateString(),
+					lastUsed: null,
+					type: 'public-key (simulated)',
+				})
+
+				document.getElementById('passkey-step-2').style.display = 'none'
+				document.getElementById('passkey-step-3').style.display = 'block'
+				document.getElementById('passkey-success-name').textContent = `"${name}" registered!`
+				renderPasskeys()
+			}, 1000)
+		}
+	})
+
+	// Done button
+	document.getElementById('passkey-done-btn').addEventListener('click', () => {
+		document.getElementById('passkey-modal').classList.remove('open')
+		showToast('Passkey added successfully')
+	})
+
+	function showToast(message) {
+		const toast = document.getElementById('toast')
+		toast.textContent = message
+		toast.classList.add('show')
+		setTimeout(() => toast.classList.remove('show'), 3000)
+	}
+
+	// Initial render
+	renderPasskeys()
+
+	// ═══════════════════════════════════════════════════════════════
+	// Mirror harness API (same pattern as two-browser-remote.html)
+	// ═══════════════════════════════════════════════════════════════
+
+	function escapeAttr(value) {
+		return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+	}
+
+	function roleFromElement(el) {
+		if (el.dataset.paRole) return el.dataset.paRole
+		const tag = el.tagName.toLowerCase()
+		if (tag === 'button') return 'button'
+		if (tag === 'input') return el.type === 'checkbox' ? 'checkbox' : 'textbox'
+		if (tag === 'select') return 'combo'
+		if (tag === 'a') return 'link'
+		return 'generic'
+	}
+
+	function visibleLabel(el) {
+		const aria = el.getAttribute('aria-label')
+		if (aria) return aria
+		if (el.tagName.toLowerCase() === 'button') return el.textContent.trim() || 'button'
+		if (el.tagName.toLowerCase() === 'input') return el.placeholder || el.type || 'input'
+		if (el.tagName.toLowerCase() === 'select') return el.options?.[0]?.text || 'select'
+		if (el.tagName.toLowerCase() === 'a') return el.textContent.trim() || 'link'
+		return 'element'
+	}
+
+	window.__snapshotCounter = 0
+	window.__getSnapshot = () => {
+		const elements = []
+		const lines = []
+
+		for (const el of document.querySelectorAll('[data-pa-id]')) {
+			// Skip invisible elements
+			const style = getComputedStyle(el)
+			if (style.display === 'none' || style.visibility === 'hidden') continue
+			const rect = el.getBoundingClientRect()
+			if (rect.width === 0 && rect.height === 0) continue
+
+			const id = Number(el.dataset.paId)
+			if (!id) continue
+			const tag = el.tagName.toLowerCase()
+			const label = visibleLabel(el)
+			const attrs = []
+			if (el.type) attrs.push(`type="${escapeAttr(el.type)}"`)
+			if (el.placeholder) attrs.push(`placeholder="${escapeAttr(el.placeholder)}"`)
+			if (el.getAttribute('aria-label')) attrs.push(`aria-label="${escapeAttr(el.getAttribute('aria-label'))}"`)
+
+			const inViewport = rect.top < window.innerHeight && rect.bottom > 0 && rect.left < window.innerWidth && rect.right > 0
+
+			elements.push({
+				id,
+				rect: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) },
+				role: roleFromElement(el),
+				label,
+				tag,
+				value: el.value ?? '',
+				zOrder: 1,
+				inViewport,
+				tabIndex: el.tabIndex,
+			})
+
+			if (tag === 'input' || tag === 'select') {
+				lines.push(`[${id}]<${tag}${attrs.length ? ` ${attrs.join(' ')}` : ''} />`)
+			} else {
+				lines.push(`[${id}]<${tag}${attrs.length ? ` ${attrs.join(' ')}` : ''}>${escapeAttr(label)}</${tag}>`)
+			}
+		}
+
+		return {
+			seq: ++window.__snapshotCounter,
+			ts: Date.now(),
+			viewport: { w: window.innerWidth, h: window.innerHeight },
+			scroll: { x: window.scrollX, y: window.scrollY },
+			url: window.location.href,
+			title: document.title,
+			elements,
+			simplifiedHTML: lines.join('\n'),
+		}
+	}
+
+	const remoteLog = []
+	const pushLog = (entry) => remoteLog.push(entry)
+
+	function fail(type, message) {
+		const entry = { success: false, type, message }
+		pushLog(entry)
+		return entry
+	}
+
+	window.__applyInputEvent = async (event) => {
+		const type = event?.type
+		if (!type) return fail('bad', 'event.type missing')
+
+		const el = event.elementId != null
+			? document.querySelector(`[data-pa-id="${event.elementId}"]`)
+			: null
+
+		switch (type) {
+			case 'click': {
+				if (!el) return fail(type, `No element id ${event.elementId}`)
+				el.click()
+				el.dataset.clicked = '1'
+				const entry = { success: true, type, elementId: event.elementId, message: `Clicked [${event.elementId}]` }
+				pushLog(entry)
+				return entry
+			}
+			case 'focus': {
+				if (!el) return fail(type, `No element id ${event.elementId}`)
+				el.focus()
+				const entry = { success: true, type, elementId: event.elementId, message: `Focused [${event.elementId}]` }
+				pushLog(entry)
+				return entry
+			}
+			case 'type': {
+				if (!el) return fail(type, `No element id ${event.elementId}`)
+				el.focus()
+				el.value = event.text || ''
+				el.dispatchEvent(new Event('input', { bubbles: true }))
+				const entry = { success: true, type, elementId: event.elementId, message: `Typed "${event.text}" into [${event.elementId}]` }
+				pushLog(entry)
+				return entry
+			}
+			case 'keyboard': {
+				const target = el || document.activeElement || document.body
+				const eventInit = { key: event.key, code: event.code || event.key, bubbles: true, cancelable: true }
+				target.dispatchEvent(new KeyboardEvent('keydown', eventInit))
+				target.dispatchEvent(new KeyboardEvent('keyup', eventInit))
+				const entry = { success: true, type, message: `Pressed key ${event.key}` }
+				pushLog(entry)
+				return entry
+			}
+			default:
+				return fail(type, `Unsupported: ${type}`)
+		}
+	}
+
+	window.__getEventLog = () => [...remoteLog]
+	window.__clearEventLog = () => { remoteLog.length = 0 }
+	window.__getRegisteredPasskeys = () => [...registeredPasskeys]
+	window.__initialised = true
+</script>
+</body>
+</html>
