@@ -474,12 +474,9 @@ export class PageAgentCore extends EventTarget {
 
 				// Advance sub-goal if the LLM signals completion
 				if (this.#currentPlan && input.current_sub_goal) {
-					const signal = input.current_sub_goal.toLowerCase()
-					if (signal.includes('completed')) {
-						if (
-							this.#currentPlan.current_sub_goal_index <
-							this.#currentPlan.sub_goals.length - 1
-						) {
+					const signal = input.current_sub_goal.toLowerCase().trim()
+					if (signal === 'completed') {
+						if (this.#currentPlan.current_sub_goal_index < this.#currentPlan.sub_goals.length - 1) {
 							this.#currentPlan.current_sub_goal_index++
 							console.log(
 								chalk.magenta.bold(
@@ -487,10 +484,8 @@ export class PageAgentCore extends EventTarget {
 								)
 							)
 						}
-					} else if (signal.includes('revise')) {
-						console.log(
-							chalk.yellow.bold('📋 Plan revision requested — clearing current plan')
-						)
+					} else if (signal === 'need to revise plan' || signal === 'revise') {
+						console.log(chalk.yellow.bold('📋 Plan revision requested — clearing current plan'))
 						this.#currentPlan = null
 					}
 				}
@@ -515,9 +510,7 @@ export class PageAgentCore extends EventTarget {
 				const shouldEnrich = enrichableActions.has(toolName)
 
 				// Capture state BEFORE action for diff computation
-				const stateBefore = shouldEnrich
-					? await this.pageController.getStateSummary()
-					: null
+				const stateBefore = shouldEnrich ? await this.pageController.getStateSummary() : null
 
 				// Execute tool, bind `this` to PageAgent
 				let result = await tool.execute.bind(this)(toolInput)
@@ -632,7 +625,7 @@ export class PageAgentCore extends EventTarget {
 	 * Returns the action name if a loop is detected, otherwise null.
 	 */
 	#detectLoop(): string | null {
-		const threshold = this.config.loopDetectionThreshold ?? 3
+		const threshold = Math.max(2, Math.min(this.config.loopDetectionThreshold ?? 3, 10))
 		// Actions that are intentionally repetitive should be excluded
 		const excludedActions = new Set(['wait', 'done', 'ask_user'])
 
@@ -653,7 +646,13 @@ export class PageAgentCore extends EventTarget {
 		for (const step of recentSteps) {
 			const actionName = step.action.name
 			if (excludedActions.has(actionName)) continue
-			const hash = JSON.stringify({ name: actionName, input: step.action.input })
+			let hash: string
+			try {
+				hash = JSON.stringify({ name: actionName, input: step.action.input })
+			} catch {
+				// Circular references or non-serializable inputs — fall back to action name only
+				hash = `name:${actionName}`
+			}
 			const entry = hashCounts.get(hash)
 			if (entry) {
 				entry.count++

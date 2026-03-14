@@ -14,10 +14,23 @@ export class PageAgent extends PageAgentCore {
 	panel: Panel
 
 	constructor(config: PageAgentConfig) {
+		// Responsive maxElements: scale with viewport width when not explicitly set.
+		// Desktop (>=1024px): 80 elements. Tablet (>=768px): 60. Mobile (<768px): 40.
+		const defaultMaxElements =
+			typeof window !== 'undefined'
+				? window.innerWidth >= 1024
+					? 80
+					: window.innerWidth >= 768
+						? 60
+						: 40
+				: 80
+		const rawMaxElements = config.maxElements ?? defaultMaxElements
+		const maxElements = Math.max(10, Math.min(Math.floor(rawMaxElements), 500))
+
 		const pageController = new PageController({
 			...config,
 			enableMask: config.enableMask ?? true,
-			maxElements: config.maxElements ?? 80,
+			maxElements,
 		})
 
 		super({ ...config, pageController })

@@ -182,7 +182,11 @@ export interface ElementCappingOptions {
  *
  * @todo 数据脱敏过滤器
  */
-export function flatTreeToString(flatTree: FlatDomTree, includeAttributes?: string[], cappingOptions?: ElementCappingOptions): string {
+export function flatTreeToString(
+	flatTree: FlatDomTree,
+	includeAttributes?: string[],
+	cappingOptions?: ElementCappingOptions
+): string {
 	const DEFAULT_INCLUDE_ATTRIBUTES = [
 		'title',
 		'type',
@@ -289,8 +293,13 @@ export function flatTreeToString(flatTree: FlatDomTree, includeAttributes?: stri
 	let includedIndices: Set<number> | null = null // null = include all
 	let totalInteractiveCount = 0
 
-	if (maxElements !== undefined) {
-		const interactiveElements: { highlightIndex: number; isInViewport: boolean; isNew: boolean; domOrder: number }[] = []
+	if (maxElements !== undefined && maxElements > 0) {
+		const interactiveElements: {
+			highlightIndex: number
+			isInViewport: boolean
+			isNew: boolean
+			domOrder: number
+		}[] = []
 
 		// Walk the flat tree map to collect interactive elements with their properties
 		for (const nodeId in flatTree.map) {
@@ -298,8 +307,8 @@ export function flatTreeToString(flatTree: FlatDomTree, includeAttributes?: stri
 			if (node.isInteractive && typeof node.highlightIndex === 'number') {
 				interactiveElements.push({
 					highlightIndex: node.highlightIndex,
-					isInViewport: !!(node as any).isInViewport,
-					isNew: !!(node as any).isNew,
+					isInViewport: !!(node as ElementDomNode).isInViewport,
+					isNew: !!(node as ElementDomNode).isNew,
 					domOrder: node.highlightIndex, // highlightIndex is assigned in DOM order
 				})
 			}
@@ -345,7 +354,9 @@ export function flatTreeToString(flatTree: FlatDomTree, includeAttributes?: stri
 
 	const flushOmitted = (result: string[], depthStr: string): void => {
 		if (omittedRun > 0) {
-			result.push(`${depthStr}[... ${omittedRun} more element${omittedRun === 1 ? '' : 's'}, scroll or refine to reveal]`)
+			result.push(
+				`${depthStr}[... ${omittedRun} more element${omittedRun === 1 ? '' : 's'}, scroll or refine to reveal]`
+			)
 			omittedRun = 0
 		}
 	}
@@ -499,7 +510,9 @@ export function flatTreeToString(flatTree: FlatDomTree, includeAttributes?: stri
 	if (includedIndices !== null && totalInteractiveCount > 0) {
 		const omittedCount = totalInteractiveCount - includedIndices.size
 		if (omittedCount > 0) {
-			result.push(`\n[${omittedCount} of ${totalInteractiveCount} interactive elements omitted — showing ${includedIndices.size} most relevant. Scroll to reveal more.]`)
+			result.push(
+				`\n[${omittedCount} of ${totalInteractiveCount} interactive elements omitted — showing ${includedIndices.size} most relevant. Scroll to reveal more.]`
+			)
 		}
 	}
 

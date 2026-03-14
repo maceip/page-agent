@@ -183,14 +183,57 @@ tools.set(
 	})
 )
 
+/**
+ * Allowed keyboard keys for press_key.
+ * Intentionally excludes dangerous keys like F5 (reload), Ctrl+W (close tab).
+ */
+const ALLOWED_KEYS = [
+	// Navigation
+	'Enter',
+	'Escape',
+	'Tab',
+	'Backspace',
+	'Delete',
+	'Space',
+	'ArrowDown',
+	'ArrowUp',
+	'ArrowLeft',
+	'ArrowRight',
+	'Home',
+	'End',
+	'PageUp',
+	'PageDown',
+	// Letters a-z (single char)
+	// Numbers 0-9 (single char)
+	// Common punctuation (single char)
+] as const
+
+const ALLOWED_MODIFIERS = ['Ctrl', 'Control', 'Shift', 'Alt', 'Meta', 'Command'] as const
+
+/**
+ * Validate that a key is allowed. Accepts named keys from ALLOWED_KEYS
+ * or single printable characters (letters, digits, punctuation).
+ */
+function isAllowedKey(key: string): boolean {
+	if ((ALLOWED_KEYS as readonly string[]).includes(key)) return true
+	// Single printable character (letter, digit, or common punctuation)
+	if (key.length === 1 && /^[a-zA-Z0-9`~!@#$%^&*()\-_=+[\]{}\\|;:'",.<>/?]$/.test(key)) return true
+	return false
+}
+
 tools.set(
 	'press_key',
 	tool({
 		description:
 			'Press a keyboard key, optionally with modifiers. Use for Enter (submit forms/search), Escape (close modals), Tab (navigate fields), arrow keys (dropdown navigation).',
 		inputSchema: z.object({
-			key: z.string(),
-			modifiers: z.array(z.string()).optional(),
+			key: z.string().check(
+				z.refine((k) => isAllowedKey(k), {
+					message:
+						'Key not in allowed list. Use named keys (Enter, Escape, Tab, Arrow*, etc.) or single printable characters.',
+				})
+			),
+			modifiers: z.array(z.enum(ALLOWED_MODIFIERS)).optional(),
 		}),
 		execute: async function (this: PageAgentCore, input) {
 			const result = await this.pageController.pressKey(input.key, input.modifiers)
