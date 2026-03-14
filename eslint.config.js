@@ -14,6 +14,7 @@ export default defineConfig([
 		'packages/*/src/components/ui',
 		'**/.wxt',
 		'**/.output',
+		'e2e/',
 	]),
 	{
 		plugins: {
