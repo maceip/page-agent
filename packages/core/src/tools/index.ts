@@ -183,7 +183,53 @@ tools.set(
 	})
 )
 
-// @todo send_keys
+tools.set(
+	'press_key',
+	tool({
+		description:
+			'Press a keyboard key, optionally with modifiers. Use for Enter (submit forms/search), Escape (close modals), Tab (navigate fields), arrow keys (dropdown navigation).',
+		inputSchema: z.object({
+			key: z.string(),
+			modifiers: z.array(z.string()).optional(),
+		}),
+		execute: async function (this: PageAgentCore, input) {
+			const result = await this.pageController.pressKey(input.key, input.modifiers)
+			return result.message
+		},
+	})
+)
+
+tools.set(
+	'hover_element',
+	tool({
+		description:
+			'Hover over an element to trigger tooltips, dropdown menus, or other hover-dependent UI.',
+		inputSchema: z.object({
+			index: z.int().min(0),
+		}),
+		execute: async function (this: PageAgentCore, input) {
+			const result = await this.pageController.hoverElement(input.index)
+			return result.message
+		},
+	})
+)
+
+tools.set(
+	'clear_and_type',
+	tool({
+		description:
+			'Clear any existing text in a field and type new text. Use when a field has pre-filled content that needs to be replaced.',
+		inputSchema: z.object({
+			index: z.int().min(0),
+			text: z.string(),
+		}),
+		execute: async function (this: PageAgentCore, input) {
+			const result = await this.pageController.clearAndType(input.index, input.text)
+			return result.message
+		},
+	})
+)
+
 // @todo upload_file
 // @todo go_back
 // @todo extract_structured_data

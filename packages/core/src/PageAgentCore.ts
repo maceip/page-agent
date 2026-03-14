@@ -10,12 +10,14 @@ import * as z from 'zod/v4'
 
 import { ChameleonEngine } from './chameleon'
 import { PeekabooController } from './peekaboo'
+import PLANNING_PROMPT from './prompts/planning_prompt.md?raw'
 import SYSTEM_PROMPT from './prompts/system_prompt.md?raw'
 import { sanitizePageContent } from './sanitize'
 import { tools } from './tools'
 import type {
 	AgentActivity,
 	AgentConfig,
+	AgentPlan,
 	AgentReflection,
 	AgentStatus,
 	AgentStepEvent,
@@ -109,6 +111,9 @@ export class PageAgentCore extends EventTarget {
 
 	/** Number of loop-detection warnings injected during this task */
 	#loopWarningCount = 0
+
+	/** Current plan produced by the planning phase */
+	#currentPlan: AgentPlan | null = null
 
 	constructor(config: PageAgentCoreConfig) {
 		super()
@@ -269,6 +274,12 @@ export class PageAgentCore extends EventTarget {
 		// Reset internal states
 		this.#states = { totalWaitTime: 0, lastURL: '', browserState: null }
 		this.#loopWarningCount = 0
+		this.#currentPlan = null
+
+		// Planning phase: create a structured plan before the main loop
+		if (this.config.enablePlanning !== false) {
+			await this.#runPlanningPhase(task)
+		}
 
 		let step = 0
 
@@ -419,6 +430,12 @@ export class PageAgentCore extends EventTarget {
 			evaluation_previous_goal: z.string().optional(),
 			memory: z.string().optional(),
 			next_goal: z.string().optional(),
+			current_sub_goal: z
+				.string()
+				.optional()
+				.describe(
+					'Signal sub-goal progress: "completed", "still working", or "need to revise plan"'
+				),
 			action: actionSchema,
 		})
 
@@ -453,6 +470,29 @@ export class PageAgentCore extends EventTarget {
 
 				if (reflectionText) {
 					console.log(reflectionText)
+				}
+
+				// Advance sub-goal if the LLM signals completion
+				if (this.#currentPlan && input.current_sub_goal) {
+					const signal = input.current_sub_goal.toLowerCase()
+					if (signal.includes('completed')) {
+						if (
+							this.#currentPlan.current_sub_goal_index <
+							this.#currentPlan.sub_goals.length - 1
+						) {
+							this.#currentPlan.current_sub_goal_index++
+							console.log(
+								chalk.magenta.bold(
+									`📋 Sub-goal completed. Now on: ${this.#currentPlan.current_sub_goal_index + 1}. ${this.#currentPlan.sub_goals[this.#currentPlan.current_sub_goal_index]}`
+								)
+							)
+						}
+					} else if (signal.includes('revise')) {
+						console.log(
+							chalk.yellow.bold('📋 Plan revision requested — clearing current plan')
+						)
+						this.#currentPlan = null
+					}
 				}
 
 				// Find the corresponding tool
@@ -723,6 +763,23 @@ export class PageAgentCore extends EventTarget {
 		prompt += `Current time: ${new Date().toLocaleString()}\n`
 		prompt += '</step_info>\n'
 		prompt += '</agent_state>\n\n'
+
+		// <plan> (if planning phase produced a plan)
+
+		if (this.#currentPlan) {
+			prompt += '<plan>\n'
+			for (let i = 0; i < this.#currentPlan.sub_goals.length; i++) {
+				const goal = this.#currentPlan.sub_goals[i]
+				if (i < this.#currentPlan.current_sub_goal_index) {
+					prompt += `${i + 1}. ✅ ${goal}\n`
+				} else if (i === this.#currentPlan.current_sub_goal_index) {
+					prompt += `${i + 1}. → ${goal} (CURRENT)\n`
+				} else {
+					prompt += `${i + 1}. ${goal}\n`
+				}
+			}
+			prompt += '</plan>\n\n'
+		}
 
 		// <agent_history>
 		//  - <step_N> for steps

@@ -124,6 +124,18 @@ export class RemotePageController implements IPageController {
 		return this.callAction('execute_javascript', script)
 	}
 
+	async pressKey(key: string, modifiers?: string[]): Promise<ActionResult> {
+		return this.callAction('press_key', key, modifiers)
+	}
+
+	async hoverElement(index: number): Promise<ActionResult> {
+		return this.callAction('hover_element', index)
+	}
+
+	async clearAndType(index: number, text: string): Promise<ActionResult> {
+		return this.callAction('clear_and_type', index, text)
+	}
+
 	/** @note Managed by content script via storage polling. */
 	async showMask(): Promise<void> {}
 	/** @note Managed by content script via storage polling. */
@@ -138,7 +150,10 @@ export class RemotePageController implements IPageController {
 			| 'select_option'
 			| 'scroll'
 			| 'scroll_horizontally'
-			| 'execute_javascript',
+			| 'execute_javascript'
+			| 'press_key'
+			| 'hover_element'
+			| 'clear_and_type',
 	>(
 		action: K,
 		...args: import('./page-control-protocol').PageControlRemoteMethods[K]['args']

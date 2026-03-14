@@ -7,9 +7,12 @@
  * All public methods are async for potential remote calling support.
  */
 import {
+	clearAndTypeElement,
 	clickElement,
 	getElementByIndex,
+	hoverElementAction,
 	inputTextElement,
+	pressKeyAction,
 	scrollHorizontally,
 	scrollVertically,
 	selectOptionElement,
@@ -132,6 +135,9 @@ export interface IPageController {
 		index?: number
 	}): Promise<ActionResult>
 	executeJavascript(script: string): Promise<ActionResult>
+	pressKey(key: string, modifiers?: string[]): Promise<ActionResult>
+	hoverElement(index: number): Promise<ActionResult>
+	clearAndType(index: number, text: string): Promise<ActionResult>
 
 	// -- Mask --
 	showMask(): Promise<void>
@@ -493,6 +499,69 @@ export class PageController extends EventTarget implements IPageController {
 			return {
 				success: false,
 				message: `❌ Error executing JavaScript: ${error}`,
+			}
+		}
+	}
+
+	/**
+	 * Press a keyboard key, optionally with modifiers
+	 */
+	async pressKey(key: string, modifiers?: string[]): Promise<ActionResult> {
+		try {
+			await pressKeyAction(key, modifiers)
+			const modStr = modifiers?.length ? ` with modifiers [${modifiers.join(', ')}]` : ''
+			return {
+				success: true,
+				message: `✅ Pressed key (${key})${modStr}.`,
+			}
+		} catch (error) {
+			return {
+				success: false,
+				message: `❌ Failed to press key: ${error}`,
+			}
+		}
+	}
+
+	/**
+	 * Hover over an element by index
+	 */
+	async hoverElement(index: number): Promise<ActionResult> {
+		try {
+			this.assertIndexed()
+			const element = getElementByIndex(this.selectorMap, index)
+			const elemText = this.elementTextMap.get(index)
+			await hoverElementAction(element)
+
+			return {
+				success: true,
+				message: `✅ Hovered over element (${elemText ?? index}).`,
+			}
+		} catch (error) {
+			return {
+				success: false,
+				message: `❌ Failed to hover element: ${error}`,
+			}
+		}
+	}
+
+	/**
+	 * Clear existing text in a field and type new text
+	 */
+	async clearAndType(index: number, text: string): Promise<ActionResult> {
+		try {
+			this.assertIndexed()
+			const element = getElementByIndex(this.selectorMap, index)
+			const elemText = this.elementTextMap.get(index)
+			await clearAndTypeElement(element, text)
+
+			return {
+				success: true,
+				message: `✅ Cleared and typed (${text}) into element (${elemText ?? index}).`,
+			}
+		} catch (error) {
+			return {
+				success: false,
+				message: `❌ Failed to clear and type: ${error}`,
 			}
 		}
 	}

@@ -9,6 +9,15 @@ import type { PageAgentTool } from './tools'
 /** Supported UI languages */
 export type SupportedLanguage = 'en-US' | 'zh-CN'
 
+/**
+ * Structured plan produced by the planning phase.
+ * Contains a list of sub-goals that the agent will follow in order.
+ */
+export interface AgentPlan {
+	sub_goals: string[]
+	current_sub_goal_index: number
+}
+
 export interface AgentConfig extends LLMConfig {
 	language?: SupportedLanguage
 
@@ -180,6 +189,14 @@ export interface AgentConfig extends LLMConfig {
 	 * @experimental Use with caution - incorrect prompts may break agent behavior.
 	 */
 	customSystemPrompt?: string
+
+	/**
+	 * Enable the planning phase before the main action loop.
+	 * When enabled, the agent makes a dedicated LLM call to produce a structured
+	 * plan with numbered sub-goals before starting the step loop.
+	 * @default true
+	 */
+	enablePlanning?: boolean
 }
 
 /**
@@ -299,6 +316,8 @@ export type AgentStatus = 'idle' | 'running' | 'completed' | 'error'
  */
 export type AgentActivity =
 	| { type: 'thinking' }
+	| { type: 'planning' }
+	| { type: 'plan_complete'; sub_goals: string[] }
 	| { type: 'executing'; tool: string; input: unknown }
 	| { type: 'executed'; tool: string; input: unknown; output: string; duration: number }
 	| { type: 'retrying'; attempt: number; maxAttempts: number }

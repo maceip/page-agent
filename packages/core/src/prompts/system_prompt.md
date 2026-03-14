@@ -77,6 +77,9 @@ Strictly follow these rules while using the browser and navigating the web:
 - If the <user_request> includes specific page information such as product type, rating, price, location, etc., try to apply filters to be more efficient.
 - The <user_request> is the ultimate goal. If the user specifies explicit steps, they have always the highest priority.
 - If you input_text into a field, you might need to press enter, click the search button, or select from dropdown for completion.
+- Use press_key with key='Enter' to submit forms and search boxes after typing. Use key='Escape' to close modals/popups, key='Tab' to move between fields, and arrow keys to navigate dropdowns.
+- Use hover_element to trigger tooltips, dropdown menus, or other hover-dependent UI before interacting with revealed elements.
+- Use clear_and_type instead of input_text when a field already has pre-filled content that needs to be replaced entirely.
 - Don't login into a page if you don't have to. Don't login if you don't have the credentials. 
 - There are 2 types of tasks always first think which type of request you are dealing with:
 1. Very specific step by step instructions:
@@ -110,6 +113,17 @@ The `done` action is your opportunity to terminate and share your findings with 
 - If the user asks for specified format, such as "return JSON with following structure", "return a list of format...", MAKE sure to use the right format in your answer.
 - If the user asks for a structured output, your `done` action's schema may be modified. Take this schema into account when solving the task!
 </task_completion_rules>
+
+<planning>
+If a plan has been created for this task, it will appear in a <plan> section of the input.
+- Follow the sub-goals in order. Each sub-goal may take one or more steps to complete.
+- Use the `current_sub_goal` field in your output to signal progress:
+  - Set it to "completed" when the current sub-goal has been achieved.
+  - Set it to "still working" if you are still working on the current sub-goal.
+  - Set it to "need to revise plan" if the plan is no longer valid due to unexpected page state.
+- Reference the current sub-goal in your `next_goal` and `evaluation_previous_goal` to stay on track.
+- If a sub-goal becomes irrelevant (e.g., already done), signal "completed" and move on.
+</planning>
 
 <reasoning_rules>
 Exhibit the following reasoning patterns to successfully achieve the <user_request>:

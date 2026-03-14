@@ -34,6 +34,9 @@ export interface PageControlRemoteMethods {
 		return: ActionResult
 	}
 	execute_javascript: { args: [script: string]; return: ActionResult }
+	press_key: { args: [key: string, modifiers?: string[]]; return: ActionResult }
+	hover_element: { args: [index: number]; return: ActionResult }
+	clear_and_type: { args: [index: number, text: string]; return: ActionResult }
 }
 
 /** All valid PAGE_CONTROL action names */
@@ -51,6 +54,9 @@ export const ACTION_TO_METHOD = {
 	scroll: 'scroll',
 	scroll_horizontally: 'scrollHorizontally',
 	execute_javascript: 'executeJavascript',
+	press_key: 'pressKey',
+	hover_element: 'hoverElement',
+	clear_and_type: 'clearAndType',
 } as const satisfies Record<PageControlAction, string>
 
 /** A typed PAGE_CONTROL message sent over chrome.runtime */
