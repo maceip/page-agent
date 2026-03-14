@@ -7,54 +7,8 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 
+import { detectLoop } from '../packages/core/src/PageAgentCore'
 import type { AgentStepEvent, HistoricalEvent } from '../packages/core/src/types'
-
-/**
- * Standalone detectLoop function extracted for testing.
- * Mirrors the logic in PageAgentCore.#detectLoop()
- */
-function detectLoop(history: HistoricalEvent[], threshold: number = 3): string | null {
-	// Clamp threshold (same as production code)
-	threshold = Math.max(2, Math.min(threshold, 10))
-	const excludedActions = new Set(['wait', 'done', 'ask_user'])
-
-	const windowSize = threshold + 2
-	const recentSteps: AgentStepEvent[] = []
-	for (let i = history.length - 1; i >= 0 && recentSteps.length < windowSize; i--) {
-		const event = history[i]
-		if (event.type === 'step') {
-			recentSteps.unshift(event)
-		}
-	}
-
-	if (recentSteps.length < threshold) return null
-
-	const hashCounts = new Map<string, { count: number; actionName: string }>()
-	for (const step of recentSteps) {
-		const actionName = step.action.name
-		if (excludedActions.has(actionName)) continue
-		let hash: string
-		try {
-			hash = JSON.stringify({ name: actionName, input: step.action.input })
-		} catch {
-			hash = `name:${actionName}`
-		}
-		const entry = hashCounts.get(hash)
-		if (entry) {
-			entry.count++
-		} else {
-			hashCounts.set(hash, { count: 1, actionName })
-		}
-	}
-
-	for (const [, { count, actionName }] of hashCounts) {
-		if (count >= threshold) {
-			return actionName
-		}
-	}
-
-	return null
-}
 
 /** Helper to create a step event */
 function makeStep(actionName: string, input: any = {}, stepIndex: number = 0): AgentStepEvent {

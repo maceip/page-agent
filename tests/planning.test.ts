@@ -5,45 +5,8 @@
  */
 import { describe, expect, it } from 'vitest'
 
+import { advanceSubGoal, renderPlan } from '../packages/core/src/PageAgentCore'
 import type { AgentPlan } from '../packages/core/src/types'
-
-/**
- * Render plan to prompt text (mirrors #assembleUserPrompt plan section)
- */
-function renderPlan(plan: AgentPlan): string {
-	let prompt = '<plan>\n'
-	for (let i = 0; i < plan.sub_goals.length; i++) {
-		const goal = plan.sub_goals[i]
-		if (i < plan.current_sub_goal_index) {
-			prompt += `${i + 1}. ✅ ${goal}\n`
-		} else if (i === plan.current_sub_goal_index) {
-			prompt += `${i + 1}. → ${goal} (CURRENT)\n`
-		} else {
-			prompt += `${i + 1}. ${goal}\n`
-		}
-	}
-	prompt += '</plan>\n'
-	return prompt
-}
-
-/**
- * Advance sub-goal based on signal (mirrors #packMacroTool logic, post-fix)
- */
-function advanceSubGoal(plan: AgentPlan, signal: string): AgentPlan | null {
-	const normalizedSignal = signal.toLowerCase().trim()
-	if (normalizedSignal === 'completed') {
-		if (plan.current_sub_goal_index < plan.sub_goals.length - 1) {
-			return {
-				...plan,
-				current_sub_goal_index: plan.current_sub_goal_index + 1,
-			}
-		}
-		return plan // already at last sub-goal
-	} else if (normalizedSignal === 'need to revise plan' || normalizedSignal === 'revise') {
-		return null // clear plan
-	}
-	return plan // no change (e.g. "still working")
-}
 
 describe('M1: Planning Phase', () => {
 	describe('Plan Rendering', () => {

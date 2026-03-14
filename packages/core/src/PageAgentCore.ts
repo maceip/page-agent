@@ -68,6 +68,95 @@ export type PageAgentCoreConfig = AgentConfig & { pageController: IPageControlle
  *    - NOT included in LLM context
  *    - Types: thinking, executing, executed, retrying, error
  */
+/**
+ * Inspect recent history for repeated identical actions.
+ * Returns the action name if a loop is detected, otherwise null.
+ */
+export function detectLoop(history: HistoricalEvent[], threshold: number = 3): string | null {
+	threshold = Math.max(2, Math.min(threshold, 10))
+	// Actions that are intentionally repetitive should be excluded
+	const excludedActions = new Set(['wait', 'done', 'ask_user'])
+
+	// Collect the last N step events (look at a window of threshold + 2)
+	const windowSize = threshold + 2
+	const recentSteps: AgentStepEvent[] = []
+	for (let i = history.length - 1; i >= 0 && recentSteps.length < windowSize; i--) {
+		const event = history[i]
+		if (event.type === 'step') {
+			recentSteps.unshift(event)
+		}
+	}
+
+	if (recentSteps.length < threshold) return null
+
+	// Build action hashes and count occurrences
+	const hashCounts = new Map<string, { count: number; actionName: string }>()
+	for (const step of recentSteps) {
+		const actionName = step.action.name
+		if (excludedActions.has(actionName)) continue
+		let hash: string
+		try {
+			hash = JSON.stringify({ name: actionName, input: step.action.input })
+		} catch {
+			// Circular references or non-serializable inputs — fall back to action name only
+			hash = `name:${actionName}`
+		}
+		const entry = hashCounts.get(hash)
+		if (entry) {
+			entry.count++
+		} else {
+			hashCounts.set(hash, { count: 1, actionName })
+		}
+	}
+
+	for (const [, { count, actionName }] of hashCounts) {
+		if (count >= threshold) {
+			return actionName
+		}
+	}
+
+	return null
+}
+
+/**
+ * Render an agent plan to prompt text with markers for completed/current/pending goals.
+ */
+export function renderPlan(plan: AgentPlan): string {
+	let prompt = '<plan>\n'
+	for (let i = 0; i < plan.sub_goals.length; i++) {
+		const goal = plan.sub_goals[i]
+		if (i < plan.current_sub_goal_index) {
+			prompt += `${i + 1}. ✅ ${goal}\n`
+		} else if (i === plan.current_sub_goal_index) {
+			prompt += `${i + 1}. → ${goal} (CURRENT)\n`
+		} else {
+			prompt += `${i + 1}. ${goal}\n`
+		}
+	}
+	prompt += '</plan>\n'
+	return prompt
+}
+
+/**
+ * Advance or revise a plan based on a sub-goal signal.
+ * Returns the updated plan, or null if the plan should be cleared (revision requested).
+ */
+export function advanceSubGoal(plan: AgentPlan, signal: string): AgentPlan | null {
+	const normalizedSignal = signal.toLowerCase().trim()
+	if (normalizedSignal === 'completed') {
+		if (plan.current_sub_goal_index < plan.sub_goals.length - 1) {
+			return {
+				...plan,
+				current_sub_goal_index: plan.current_sub_goal_index + 1,
+			}
+		}
+		return plan // already at last sub-goal
+	} else if (normalizedSignal === 'need to revise plan' || normalizedSignal === 'revise') {
+		return null // clear plan
+	}
+	return plan // no change
+}
+
 export class PageAgentCore extends EventTarget {
 	readonly id = uid()
 	readonly config: PageAgentCoreConfig & { maxSteps: number }
@@ -474,19 +563,17 @@ export class PageAgentCore extends EventTarget {
 
 				// Advance sub-goal if the LLM signals completion
 				if (this.#currentPlan && input.current_sub_goal) {
-					const signal = input.current_sub_goal.toLowerCase().trim()
-					if (signal === 'completed') {
-						if (this.#currentPlan.current_sub_goal_index < this.#currentPlan.sub_goals.length - 1) {
-							this.#currentPlan.current_sub_goal_index++
-							console.log(
-								chalk.magenta.bold(
-									`📋 Sub-goal completed. Now on: ${this.#currentPlan.current_sub_goal_index + 1}. ${this.#currentPlan.sub_goals[this.#currentPlan.current_sub_goal_index]}`
-								)
-							)
-						}
-					} else if (signal === 'need to revise plan' || signal === 'revise') {
+					const result = advanceSubGoal(this.#currentPlan, input.current_sub_goal)
+					if (result === null) {
 						console.log(chalk.yellow.bold('📋 Plan revision requested — clearing current plan'))
 						this.#currentPlan = null
+					} else if (result.current_sub_goal_index !== this.#currentPlan.current_sub_goal_index) {
+						this.#currentPlan = result
+						console.log(
+							chalk.magenta.bold(
+								`📋 Sub-goal completed. Now on: ${this.#currentPlan.current_sub_goal_index + 1}. ${this.#currentPlan.sub_goals[this.#currentPlan.current_sub_goal_index]}`
+							)
+						)
 					}
 				}
 
@@ -620,54 +707,8 @@ export class PageAgentCore extends EventTarget {
 		return result
 	}
 
-	/**
-	 * Inspect recent history for repeated identical actions.
-	 * Returns the action name if a loop is detected, otherwise null.
-	 */
 	#detectLoop(): string | null {
-		const threshold = Math.max(2, Math.min(this.config.loopDetectionThreshold ?? 3, 10))
-		// Actions that are intentionally repetitive should be excluded
-		const excludedActions = new Set(['wait', 'done', 'ask_user'])
-
-		// Collect the last N step events (look at a window of threshold + 2)
-		const windowSize = threshold + 2
-		const recentSteps: AgentStepEvent[] = []
-		for (let i = this.history.length - 1; i >= 0 && recentSteps.length < windowSize; i--) {
-			const event = this.history[i]
-			if (event.type === 'step') {
-				recentSteps.unshift(event)
-			}
-		}
-
-		if (recentSteps.length < threshold) return null
-
-		// Build action hashes and count occurrences
-		const hashCounts = new Map<string, { count: number; actionName: string }>()
-		for (const step of recentSteps) {
-			const actionName = step.action.name
-			if (excludedActions.has(actionName)) continue
-			let hash: string
-			try {
-				hash = JSON.stringify({ name: actionName, input: step.action.input })
-			} catch {
-				// Circular references or non-serializable inputs — fall back to action name only
-				hash = `name:${actionName}`
-			}
-			const entry = hashCounts.get(hash)
-			if (entry) {
-				entry.count++
-			} else {
-				hashCounts.set(hash, { count: 1, actionName })
-			}
-		}
-
-		for (const [, { count, actionName }] of hashCounts) {
-			if (count >= threshold) {
-				return actionName
-			}
-		}
-
-		return null
+		return detectLoop(this.history, this.config.loopDetectionThreshold)
 	}
 
 	/**
@@ -766,18 +807,7 @@ export class PageAgentCore extends EventTarget {
 		// <plan> (if planning phase produced a plan)
 
 		if (this.#currentPlan) {
-			prompt += '<plan>\n'
-			for (let i = 0; i < this.#currentPlan.sub_goals.length; i++) {
-				const goal = this.#currentPlan.sub_goals[i]
-				if (i < this.#currentPlan.current_sub_goal_index) {
-					prompt += `${i + 1}. ✅ ${goal}\n`
-				} else if (i === this.#currentPlan.current_sub_goal_index) {
-					prompt += `${i + 1}. → ${goal} (CURRENT)\n`
-				} else {
-					prompt += `${i + 1}. ${goal}\n`
-				}
-			}
-			prompt += '</plan>\n\n'
+			prompt += renderPlan(this.#currentPlan) + '\n'
 		}
 
 		// <agent_history>
