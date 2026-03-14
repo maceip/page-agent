@@ -17,6 +17,7 @@ export class PageAgent extends PageAgentCore {
 		const pageController = new PageController({
 			...config,
 			enableMask: config.enableMask ?? true,
+			maxElements: config.maxElements ?? 80,
 		})
 
 		super({ ...config, pageController })

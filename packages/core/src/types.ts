@@ -19,6 +19,13 @@ export interface AgentConfig extends LLMConfig {
 	maxSteps?: number
 
 	/**
+	 * Number of times the same action (name + input) must repeat within a
+	 * recent window before loop detection triggers a warning.
+	 * @default 3
+	 */
+	loopDetectionThreshold?: number
+
+	/**
 	 * Custom tools to extend PageAgent capabilities
 	 * @experimental
 	 * @note You can also override or remove internal tools by using the same name.

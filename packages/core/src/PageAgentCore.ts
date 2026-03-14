@@ -3,7 +3,8 @@
  * All rights reserved.
  */
 import { InvokeError, LLM, type Tool } from '@page-agent/llms'
-import type { BrowserState, IPageController } from '@page-agent/page-controller'
+import type { BrowserState, IPageController, StateSummary } from '@page-agent/page-controller'
+import { diffState } from '@page-agent/page-controller'
 import chalk from 'chalk'
 import * as z from 'zod/v4'
 
@@ -105,6 +106,9 @@ export class PageAgentCore extends EventTarget {
 		/** Browser state */
 		browserState: null as BrowserState | null,
 	}
+
+	/** Number of loop-detection warnings injected during this task */
+	#loopWarningCount = 0
 
 	constructor(config: PageAgentCoreConfig) {
 		super()
@@ -264,6 +268,7 @@ export class PageAgentCore extends EventTarget {
 
 		// Reset internal states
 		this.#states = { totalWaitTime: 0, lastURL: '', browserState: null }
+		this.#loopWarningCount = 0
 
 		let step = 0
 
@@ -461,8 +466,31 @@ export class PageAgentCore extends EventTarget {
 
 				const startTime = Date.now()
 
+				// Actions that modify the page and should include a state diff
+				const enrichableActions = new Set([
+					'click_element_by_index',
+					'input_text',
+					'select_dropdown_option',
+				])
+				const shouldEnrich = enrichableActions.has(toolName)
+
+				// Capture state BEFORE action for diff computation
+				const stateBefore = shouldEnrich
+					? await this.pageController.getStateSummary()
+					: null
+
 				// Execute tool, bind `this` to PageAgent
-				const result = await tool.execute.bind(this)(toolInput)
+				let result = await tool.execute.bind(this)(toolInput)
+
+				// For enrichable actions, refresh DOM and compute diff
+				if (shouldEnrich && stateBefore) {
+					await this.pageController.updateTree()
+					const stateAfter = await this.pageController.getStateSummary()
+					const diff = diffState(stateBefore, stateAfter)
+					if (diff) {
+						result = `${result}\n[Page changes: ${diff}]`
+					}
+				}
 
 				const duration = Date.now() - startTime
 				console.log(chalk.green.bold(`Tool (${toolName}) executed for ${duration}ms`), result)
@@ -560,8 +588,51 @@ export class PageAgentCore extends EventTarget {
 	}
 
 	/**
+	 * Inspect recent history for repeated identical actions.
+	 * Returns the action name if a loop is detected, otherwise null.
+	 */
+	#detectLoop(): string | null {
+		const threshold = this.config.loopDetectionThreshold ?? 3
+		// Actions that are intentionally repetitive should be excluded
+		const excludedActions = new Set(['wait', 'done', 'ask_user'])
+
+		// Collect the last N step events (look at a window of threshold + 2)
+		const windowSize = threshold + 2
+		const recentSteps: AgentStepEvent[] = []
+		for (let i = this.history.length - 1; i >= 0 && recentSteps.length < windowSize; i--) {
+			const event = this.history[i]
+			if (event.type === 'step') {
+				recentSteps.unshift(event)
+			}
+		}
+
+		if (recentSteps.length < threshold) return null
+
+		// Build action hashes and count occurrences
+		const hashCounts = new Map<string, { count: number; actionName: string }>()
+		for (const step of recentSteps) {
+			const actionName = step.action.name
+			if (excludedActions.has(actionName)) continue
+			const hash = JSON.stringify({ name: actionName, input: step.action.input })
+			const entry = hashCounts.get(hash)
+			if (entry) {
+				entry.count++
+			} else {
+				hashCounts.set(hash, { count: 1, actionName })
+			}
+		}
+
+		for (const [, { count, actionName }] of hashCounts) {
+			if (count >= threshold) {
+				return actionName
+			}
+		}
+
+		return null
+	}
+
+	/**
 	 * Generate system observations before each step
-	 * @todo loop detection
 	 * @todo console error
 	 */
 	async #handleObservations(step: number): Promise<void> {
@@ -570,6 +641,24 @@ export class PageAgentCore extends EventTarget {
 			this.pushObservation(
 				`You have waited ${this.#states.totalWaitTime} seconds accumulatively. DO NOT wait any longer unless you have a good reason.`
 			)
+		}
+
+		// Loop detection
+		const loopedAction = this.#detectLoop()
+		if (loopedAction) {
+			this.#loopWarningCount++
+			if (this.#loopWarningCount >= 2) {
+				// Second (or later) warning — force a strategy change
+				this.pushObservation(
+					`🚨 LOOP DETECTED AGAIN: You have repeated '${loopedAction}' with the same parameters multiple times despite a previous warning. ` +
+						`You MUST change your approach NOW. Try a completely different action, scroll to find other elements, or use ask_user to request help from the user.`
+				)
+			} else {
+				this.pushObservation(
+					`⚠️ LOOP DETECTED: You have repeated '${loopedAction}' with the same parameters ${this.config.loopDetectionThreshold ?? 3} times with no meaningful change. ` +
+						`You MUST try a different approach — consider scrolling, using a different element, or asking the user for help.`
+				)
+			}
 		}
 
 		// Detect URL change

@@ -1,4 +1,4 @@
-import type { ActionResult, BrowserState, IPageController } from '@page-agent/page-controller'
+import type { ActionResult, BrowserState, IPageController, StateSummary } from '@page-agent/page-controller'
 
 import type { TabsController } from './TabsController'
 import { sendPageControlMessage } from './page-control-protocol'
@@ -39,6 +39,14 @@ export class RemotePageController implements IPageController {
 
 	async getLastUpdateTime(): Promise<number> {
 		return sendPageControlMessage('get_last_update_time', this.requireTabId())
+	}
+
+	async getStateSummary(): Promise<StateSummary> {
+		const url = await this.getCurrentUrl()
+		return {
+			url,
+			elementCount: 0, // Not available remotely; diff will still detect URL changes
+		}
 	}
 
 	async getBrowserState(): Promise<BrowserState> {

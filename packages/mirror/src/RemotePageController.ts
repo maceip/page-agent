@@ -15,7 +15,7 @@
  *   const core = new PageAgentCore({ pageController: remote, ... })
  *   // PageAgentCore now drives the remote browser through the mirror
  */
-import type { ActionResult, BrowserState, IPageController } from '@page-agent/page-controller'
+import type { ActionResult, BrowserState, IPageController, StateSummary } from '@page-agent/page-controller'
 
 import type { IHotLayer, RemoteFocusEvent, RemoteSelectEvent, RemoteTypeEvent } from './layers/hot'
 import type { MicroDOMSnapshot, SpatialElement } from './types'
@@ -63,6 +63,13 @@ export class RemotePageController extends EventTarget implements IPageController
 
 	async getLastUpdateTime(): Promise<number> {
 		return this.lastUpdateTime
+	}
+
+	async getStateSummary(): Promise<StateSummary> {
+		return {
+			url: this.snapshot?.url ?? '',
+			elementCount: this.elementMap.size,
+		}
 	}
 
 	/**
