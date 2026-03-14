@@ -825,6 +825,84 @@ export class PageAgentCore extends EventTarget {
 		return prompt
 	}
 
+	/**
+	 * Run the planning phase: make a dedicated LLM call to produce a structured
+	 * plan with numbered sub-goals before the main action loop begins.
+	 *
+	 * If the planning call fails for any reason, we gracefully fall back to
+	 * no-plan mode (the step loop runs as before).
+	 */
+	async #runPlanningPhase(task: string): Promise<void> {
+		try {
+			console.log(chalk.magenta.bold('📋 Planning phase...'))
+			this.#emitActivity({ type: 'planning' })
+
+			// Get initial browser state for context
+			await this.pageController.updateTree()
+			const browserState = await this.pageController.getBrowserState()
+			this.#states.browserState = browserState
+
+			// Build the planning prompt with task and browser context
+			let userPrompt = `<task>\n${task}\n</task>\n\n`
+			userPrompt += '<browser_state>\n'
+			userPrompt += `Current URL: ${browserState.url}\n`
+			userPrompt += `Page Title: ${browserState.title}\n`
+			userPrompt += sanitizePageContent(browserState.content) + '\n'
+			userPrompt += '</browser_state>\n'
+
+			const messages = [
+				{ role: 'system' as const, content: PLANNING_PROMPT },
+				{ role: 'user' as const, content: userPrompt },
+			]
+
+			// Define the plan tool schema
+			const planToolSchema = z.object({
+				sub_goals: z
+					.array(z.string())
+					.min(1)
+					.max(8)
+					.describe('Ordered list of high-level sub-goals to accomplish the task'),
+			})
+
+			type PlanInput = z.infer<typeof planToolSchema>
+
+			const planTool: Tool<PlanInput, { sub_goals: string[] }> = {
+				description: 'Create a structured plan with numbered sub-goals for the task.',
+				inputSchema: planToolSchema,
+				execute: async (input: PlanInput) => {
+					return { sub_goals: input.sub_goals }
+				},
+			}
+
+			const result = await this.#llm.invoke(
+				messages,
+				{ create_plan: planTool },
+				this.#abortController.signal,
+				{ toolChoiceName: 'create_plan' }
+			)
+
+			const planResult = result.toolResult as { sub_goals: string[] }
+			if (planResult?.sub_goals?.length) {
+				this.#currentPlan = {
+					sub_goals: planResult.sub_goals,
+					current_sub_goal_index: 0,
+				}
+				console.log(chalk.magenta.bold('📋 Plan created:'))
+				for (let i = 0; i < this.#currentPlan.sub_goals.length; i++) {
+					console.log(chalk.magenta(`  ${i + 1}. ${this.#currentPlan.sub_goals[i]}`))
+				}
+				this.#emitActivity({ type: 'plan_complete', sub_goals: this.#currentPlan.sub_goals })
+			}
+		} catch (error: unknown) {
+			// Graceful fallback: if planning fails, just run without a plan
+			const isAbortError = (error as any)?.rawError?.name === 'AbortError'
+			if (isAbortError) throw error // Re-throw abort errors
+
+			console.warn(chalk.yellow('📋 Planning phase failed, continuing without plan:'), error)
+			this.#currentPlan = null
+		}
+	}
+
 	#onDone(success = true) {
 		this.pageController.cleanUpHighlights()
 		this.pageController.hideMask() // No await - fire and forget

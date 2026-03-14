@@ -221,6 +221,8 @@ export interface AgentReflection {
  */
 export interface MacroToolInput extends Partial<AgentReflection> {
 	action: Record<string, any>
+	/** Signal sub-goal progress: "completed", "still working", or "need to revise plan" */
+	current_sub_goal?: string
 }
 
 /**
