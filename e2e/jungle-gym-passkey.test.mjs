@@ -13,10 +13,13 @@
  * Run: node e2e/jungle-gym-passkey.test.mjs
  */
 import assert from 'node:assert/strict'
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import puppeteer from 'puppeteer-core'
+
+const require = createRequire(import.meta.url)
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const HEADLESS = process.env.PA_DEMO_HEADLESS === '0' ? false : 'new'
@@ -59,10 +62,208 @@ const CHROMIUM = resolveChromium()
 const JUNGLE_GYM = resolve(__dirname, 'jungle-gym.html')
 const BUNDLE_PATH = resolve(__dirname, 'page-controller-bundle.js')
 
+const BUNDLE_SOURCE_MAP = resolve(__dirname, 'page-controller-bundle.js.map')
+const COVERAGE_DIR = resolve(__dirname, '..', 'coverage-e2e')
+
 const VIEWPORTS = [
 	{ width: 1280, height: 800, isMobile: false, label: 'Desktop 1280x800' },
 	{ width: 390, height: 844, isMobile: true, label: 'Mobile 390x844' },
 ]
+
+// ── Coverage helpers ────────────────────────────────────────────────
+const allCoverageEntries = []
+
+async function startCoverage(page) {
+	await page.coverage.startJSCoverage({ resetOnNavigation: false, includeRawScriptCoverage: true })
+}
+
+async function collectCoverage(page) {
+	const entries = await page.coverage.stopJSCoverage()
+	// Only keep entries for our bundle (filter out inline scripts, etc.)
+	for (const entry of entries) {
+		if (entry.url.includes('page-controller-bundle')) {
+			allCoverageEntries.push(entry.rawScriptCoverage || entry)
+		}
+	}
+}
+
+async function reportCoverage() {
+	if (allCoverageEntries.length === 0) {
+		console.log('\n  No coverage data collected for page-controller-bundle.')
+		return
+	}
+
+	let v8toIstanbul
+	try {
+		v8toIstanbul = require('v8-to-istanbul')
+	} catch {
+		console.log('\n  v8-to-istanbul not available, printing raw V8 coverage instead.')
+		printRawCoverage()
+		return
+	}
+
+	// Merge coverage from all viewports into a single script coverage
+	const merged = mergeCoverageRanges(allCoverageEntries)
+
+	// Convert to istanbul format using source map
+	const converter = v8toIstanbul(BUNDLE_PATH, 0, {
+		source: readFileSync(BUNDLE_PATH, 'utf8'),
+		sourceMap: { sourcemap: JSON.parse(readFileSync(BUNDLE_SOURCE_MAP, 'utf8')) },
+	})
+	await converter.load()
+	converter.applyCoverage(merged)
+	const istanbulCoverage = converter.toIstanbul()
+
+	// Print per-file coverage summary
+	console.log(`\n${'═'.repeat(60)}`)
+	console.log('  CODE COVERAGE REPORT (page-controller)')
+	console.log(`${'═'.repeat(60)}`)
+
+	let totalStatements = 0,
+		coveredStatements = 0
+	let totalFunctions = 0,
+		coveredFunctions = 0
+	let totalBranches = 0,
+		coveredBranches = 0
+	let totalLines = 0,
+		coveredLines = 0
+
+	const rows = []
+	for (const [filePath, fileCov] of Object.entries(istanbulCoverage)) {
+		// Only report on page-controller source files
+		const shortPath = filePath.includes('packages/page-controller')
+			? filePath.slice(filePath.indexOf('packages/page-controller'))
+			: filePath.includes('page-controller-entry')
+				? 'e2e/page-controller-entry.ts'
+				: null
+		if (!shortPath) continue
+
+		const stmts = Object.values(fileCov.s)
+		const fns = Object.values(fileCov.f)
+		const branches = Object.values(fileCov.b).flat()
+		const lines = Object.values(fileCov.getLineCoverage?.() || {})
+
+		const fileStmtTotal = stmts.length
+		const fileStmtCov = stmts.filter((c) => c > 0).length
+		const fileFnTotal = fns.length
+		const fileFnCov = fns.filter((c) => c > 0).length
+		const fileBrTotal = branches.length
+		const fileBrCov = branches.filter((c) => c > 0).length
+
+		totalStatements += fileStmtTotal
+		coveredStatements += fileStmtCov
+		totalFunctions += fileFnTotal
+		coveredFunctions += fileFnCov
+		totalBranches += fileBrTotal
+		coveredBranches += fileBrCov
+
+		const stmtPct = fileStmtTotal ? ((fileStmtCov / fileStmtTotal) * 100).toFixed(1) : '100.0'
+		const fnPct = fileFnTotal ? ((fileFnCov / fileFnTotal) * 100).toFixed(1) : '100.0'
+		const brPct = fileBrTotal ? ((fileBrCov / fileBrTotal) * 100).toFixed(1) : '100.0'
+
+		rows.push({
+			shortPath,
+			stmtPct,
+			fnPct,
+			brPct,
+			fileStmtTotal,
+			fileStmtCov,
+			fileFnTotal,
+			fileFnCov,
+			fileBrTotal,
+			fileBrCov,
+		})
+	}
+
+	// Table header
+	const colFile = 45,
+		colStmt = 12,
+		colFn = 12,
+		colBr = 12
+	console.log(
+		`  ${'File'.padEnd(colFile)} ${'Stmts'.padStart(colStmt)} ${'Funcs'.padStart(colFn)} ${'Branches'.padStart(colBr)}`
+	)
+	console.log(
+		`  ${'─'.repeat(colFile)} ${'─'.repeat(colStmt)} ${'─'.repeat(colFn)} ${'─'.repeat(colBr)}`
+	)
+
+	for (const r of rows.sort((a, b) => a.shortPath.localeCompare(b.shortPath))) {
+		const colorStmt = r.stmtPct >= 80 ? '\x1b[32m' : r.stmtPct >= 50 ? '\x1b[33m' : '\x1b[31m'
+		const colorFn = r.fnPct >= 80 ? '\x1b[32m' : r.fnPct >= 50 ? '\x1b[33m' : '\x1b[31m'
+		const colorBr = r.brPct >= 80 ? '\x1b[32m' : r.brPct >= 50 ? '\x1b[33m' : '\x1b[31m'
+		const reset = '\x1b[0m'
+		console.log(
+			`  ${r.shortPath.padEnd(colFile)} ${colorStmt}${(r.stmtPct + '%').padStart(colStmt)}${reset} ${colorFn}${(r.fnPct + '%').padStart(colFn)}${reset} ${colorBr}${(r.brPct + '%').padStart(colBr)}${reset}`
+		)
+	}
+
+	// Totals
+	const totalStmtPct = totalStatements
+		? ((coveredStatements / totalStatements) * 100).toFixed(1)
+		: '100.0'
+	const totalFnPct = totalFunctions
+		? ((coveredFunctions / totalFunctions) * 100).toFixed(1)
+		: '100.0'
+	const totalBrPct = totalBranches ? ((coveredBranches / totalBranches) * 100).toFixed(1) : '100.0'
+	console.log(
+		`  ${'─'.repeat(colFile)} ${'─'.repeat(colStmt)} ${'─'.repeat(colFn)} ${'─'.repeat(colBr)}`
+	)
+	console.log(
+		`  ${'TOTAL'.padEnd(colFile)} ${(totalStmtPct + '%').padStart(colStmt)} ${(totalFnPct + '%').padStart(colFn)} ${(totalBrPct + '%').padStart(colBr)}`
+	)
+	console.log(
+		`  ${`(${coveredStatements}/${totalStatements} stmts, ${coveredFunctions}/${totalFunctions} fns, ${coveredBranches}/${totalBranches} branches)`.padEnd(colFile + colStmt + colFn + colBr + 3)}`
+	)
+	console.log(`${'═'.repeat(60)}`)
+
+	// Write JSON coverage for further processing
+	mkdirSync(COVERAGE_DIR, { recursive: true })
+	writeFileSync(
+		join(COVERAGE_DIR, 'coverage-final.json'),
+		JSON.stringify(istanbulCoverage, null, 2)
+	)
+	console.log(`  Coverage JSON written to: ${join(COVERAGE_DIR, 'coverage-final.json')}`)
+}
+
+function mergeCoverageRanges(entries) {
+	// Merge function ranges across all collected entries
+	const functionMap = new Map()
+	for (const entry of entries) {
+		for (const fn of entry.functions) {
+			const key = `${fn.functionName}:${fn.ranges[0]?.startOffset}:${fn.ranges[0]?.endOffset}`
+			if (!functionMap.has(key)) {
+				functionMap.set(key, { ...fn, ranges: fn.ranges.map((r) => ({ ...r })) })
+			} else {
+				const existing = functionMap.get(key)
+				for (let i = 0; i < fn.ranges.length; i++) {
+					if (existing.ranges[i]) {
+						existing.ranges[i].count = Math.max(existing.ranges[i].count, fn.ranges[i].count)
+					} else {
+						existing.ranges[i] = { ...fn.ranges[i] }
+					}
+				}
+			}
+		}
+	}
+	return [...functionMap.values()]
+}
+
+function printRawCoverage() {
+	// Fallback: print raw byte-range coverage percentages
+	for (const entry of allCoverageEntries) {
+		const totalBytes = entry.text?.length || 0
+		let coveredBytes = 0
+		for (const fn of entry.functions || []) {
+			for (const range of fn.ranges || []) {
+				if (range.count > 0) {
+					coveredBytes += range.endOffset - range.startOffset
+				}
+			}
+		}
+		const pct = totalBytes ? ((coveredBytes / totalBytes) * 100).toFixed(1) : '0.0'
+		console.log(`  Bundle coverage: ${pct}% (${coveredBytes}/${totalBytes} bytes)`)
+	}
+}
 
 // ── Test runner ─────────────────────────────────────────────────────
 const results = { passed: 0, failed: 0, errors: [] }
@@ -289,6 +490,9 @@ async function main() {
 				isUserVerified: true,
 			},
 		})
+
+		// Start V8 JS coverage before loading any scripts
+		await startCoverage(page)
 
 		// Load jungle gym
 		await page.goto(`file://${JUNGLE_GYM}`, { waitUntil: 'networkidle0' })
@@ -565,10 +769,16 @@ async function main() {
 			console.log(`     [info] ${count} interactive elements on dashboard`)
 		})
 
+		// Collect V8 coverage before closing the page
+		await collectCoverage(page)
+
 		await page.close()
 	}
 
 	await browser.close()
+
+	// ── Coverage report ─────────────────────────────────────────────
+	await reportCoverage()
 
 	// ── Summary ─────────────────────────────────────────────────────
 	console.log(`\n${'='.repeat(60)}`)
