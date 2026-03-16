@@ -37,6 +37,9 @@ dist-ssr
 # Coverage
 coverage-e2e
 
+# Playwright
+test-results
+
 # AI
 .agent
 .claude
