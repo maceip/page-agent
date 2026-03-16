@@ -84,7 +84,7 @@ export function handleTabControlMessage(
 						throw new Error('New tab is missing id/windowId.')
 					}
 					debug('open_new_tab: success', newTab)
-					sendResponse({ success: true, tabId: newTab.id, windowId: newTab.windowId })
+					sendResponse({ success: true, tabId: newTab.id })
 				})
 				.catch((error) => {
 					sendResponse({

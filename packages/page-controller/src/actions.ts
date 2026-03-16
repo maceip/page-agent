@@ -214,9 +214,137 @@ export async function selectOptionElement(selectElement: HTMLSelectElement, opti
 	await waitFor(0.05)
 }
 
+/**
+ * Press a keyboard key on the currently focused element (or document.body as fallback).
+ * Dispatches keydown → keypress → keyup sequence with proper modifier support.
+ */
+export async function pressKeyAction(key: string, modifiers?: string[]) {
+	const mods = {
+		ctrlKey: modifiers?.includes('Ctrl') || modifiers?.includes('Control') || false,
+		shiftKey: modifiers?.includes('Shift') || false,
+		altKey: modifiers?.includes('Alt') || false,
+		metaKey: modifiers?.includes('Meta') || modifiers?.includes('Command') || false,
+	}
+
+	// Map common key names to their code values
+	const codeMap: Record<string, string> = {
+		Enter: 'Enter',
+		Escape: 'Escape',
+		Tab: 'Tab',
+		Backspace: 'Backspace',
+		Delete: 'Delete',
+		Space: 'Space',
+		' ': 'Space',
+		ArrowDown: 'ArrowDown',
+		ArrowUp: 'ArrowUp',
+		ArrowLeft: 'ArrowLeft',
+		ArrowRight: 'ArrowRight',
+		Home: 'Home',
+		End: 'End',
+		PageUp: 'PageUp',
+		PageDown: 'PageDown',
+	}
+
+	const code = codeMap[key] || (key.length === 1 ? `Key${key.toUpperCase()}` : key)
+
+	const target = (document.activeElement as HTMLElement) || document.body
+
+	const eventInit: KeyboardEventInit = {
+		key,
+		code,
+		bubbles: true,
+		cancelable: true,
+		...mods,
+	}
+
+	target.dispatchEvent(new KeyboardEvent('keydown', eventInit))
+	target.dispatchEvent(new KeyboardEvent('keypress', eventInit))
+	target.dispatchEvent(new KeyboardEvent('keyup', eventInit))
+
+	await waitFor(0.1)
+}
+
+/**
+ * Hover over an element by dispatching mouseenter and mouseover events.
+ */
+export async function hoverElementAction(element: HTMLElement) {
+	await scrollIntoViewIfNeeded(element)
+	await movePointerToElement(element)
+
+	element.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, cancelable: false }))
+	element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true }))
+
+	await waitFor(0.2)
+}
+
+/**
+ * Clear existing content in a field and type new text.
+ * Uses element.select() for inputs/textareas and Selection API for contenteditable.
+ */
+export async function clearAndTypeElement(element: HTMLElement, text: string) {
+	const isContentEditable = element.isContentEditable
+	if (
+		!(element instanceof HTMLInputElement) &&
+		!(element instanceof HTMLTextAreaElement) &&
+		!isContentEditable
+	) {
+		throw new Error('Element is not an input, textarea, or contenteditable')
+	}
+
+	// Focus and click the element
+	await clickElement(element)
+
+	// Clear existing content
+	if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+		// Select all and delete for standard inputs
+		element.select()
+		element.dispatchEvent(
+			new InputEvent('beforeinput', {
+				bubbles: true,
+				cancelable: true,
+				inputType: 'deleteContentBackward',
+			})
+		)
+		if (element instanceof HTMLTextAreaElement) {
+			nativeTextAreaValueSetter.call(element, '')
+		} else {
+			nativeInputValueSetter.call(element, '')
+		}
+		element.dispatchEvent(new Event('input', { bubbles: true }))
+	} else if (isContentEditable) {
+		// For contenteditable, clear via beforeinput + mutation
+		if (
+			element.dispatchEvent(
+				new InputEvent('beforeinput', {
+					bubbles: true,
+					cancelable: true,
+					inputType: 'deleteContent',
+				})
+			)
+		) {
+			element.innerText = ''
+			element.dispatchEvent(
+				new InputEvent('input', {
+					bubbles: true,
+					inputType: 'deleteContent',
+				})
+			)
+		}
+	}
+
+	await waitFor(0.05)
+
+	// Now type the new text using the existing inputText mechanism
+	await inputTextElement(element, text)
+}
+
+interface ScrollableElement extends HTMLElement {
+	scrollIntoViewIfNeeded?: (centerIfNeeded?: boolean) => void
+}
+
 export async function scrollIntoViewIfNeeded(element: HTMLElement) {
-	const el = element as any
-	if (el.scrollIntoViewIfNeeded) {
+	const el = element as ScrollableElement
+	if (typeof el.scrollIntoViewIfNeeded === 'function') {
 		el.scrollIntoViewIfNeeded()
 	} else {
 		// @todo visibility check
@@ -346,8 +474,7 @@ export async function scrollVertically(
 
 		if (reachedBottom)
 			return `Scrolled container (${el!.tagName}) by ${scrolled}px. Reached the bottom.`
-		if (reachedTop)
-			return `Scrolled container (${el!.tagName}) by ${scrolled}px. Reached the top.`
+		if (reachedTop) return `Scrolled container (${el!.tagName}) by ${scrolled}px. Reached the top.`
 		return `Scrolled container (${el!.tagName}) by ${scrolled}px.`
 	}
 }
@@ -449,8 +576,7 @@ export async function scrollHorizontally(
 		const reachedRight = dx > 0 && scrollAfter >= scrollMax - 1
 		const reachedLeft = dx < 0 && scrollAfter <= 1
 
-		if (reachedRight)
-			return `Scrolled page by ${scrolled}px. Reached the right edge of the page.`
+		if (reachedRight) return `Scrolled page by ${scrolled}px. Reached the right edge of the page.`
 		if (reachedLeft) return `Scrolled page by ${scrolled}px. Reached the left edge of the page.`
 		return `Scrolled page horizontally by ${scrolled}px.`
 	} else {

@@ -1,4 +1,9 @@
-import type { ActionResult, BrowserState, IPageController } from '@page-agent/page-controller'
+import type {
+	ActionResult,
+	BrowserState,
+	IPageController,
+	StateSummary,
+} from '@page-agent/page-controller'
 
 import type { TabsController } from './TabsController'
 import { sendPageControlMessage } from './page-control-protocol'
@@ -39,6 +44,14 @@ export class RemotePageController implements IPageController {
 
 	async getLastUpdateTime(): Promise<number> {
 		return sendPageControlMessage('get_last_update_time', this.requireTabId())
+	}
+
+	async getStateSummary(): Promise<StateSummary> {
+		const url = await this.getCurrentUrl()
+		return {
+			url,
+			elementCount: 0, // Not available remotely; diff will still detect URL changes
+		}
 	}
 
 	async getBrowserState(): Promise<BrowserState> {
@@ -118,6 +131,18 @@ export class RemotePageController implements IPageController {
 		return this.callAction('execute_javascript', script)
 	}
 
+	async pressKey(key: string, modifiers?: string[]): Promise<ActionResult> {
+		return this.callAction('press_key', key, modifiers)
+	}
+
+	async hoverElement(index: number): Promise<ActionResult> {
+		return this.callAction('hover_element', index)
+	}
+
+	async clearAndType(index: number, text: string): Promise<ActionResult> {
+		return this.callAction('clear_and_type', index, text)
+	}
+
 	/** @note Managed by content script via storage polling. */
 	async showMask(): Promise<void> {}
 	/** @note Managed by content script via storage polling. */
@@ -132,7 +157,10 @@ export class RemotePageController implements IPageController {
 			| 'select_option'
 			| 'scroll'
 			| 'scroll_horizontally'
-			| 'execute_javascript',
+			| 'execute_javascript'
+			| 'press_key'
+			| 'hover_element'
+			| 'clear_and_type',
 	>(
 		action: K,
 		...args: import('./page-control-protocol').PageControlRemoteMethods[K]['args']

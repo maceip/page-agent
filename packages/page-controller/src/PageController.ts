@@ -7,9 +7,12 @@
  * All public methods are async for potential remote calling support.
  */
 import {
+	clearAndTypeElement,
 	clickElement,
 	getElementByIndex,
+	hoverElementAction,
 	inputTextElement,
+	pressKeyAction,
 	scrollHorizontally,
 	scrollVertically,
 	selectOptionElement,
@@ -25,6 +28,11 @@ import { patchReact } from './patches/react'
 export interface PageControllerConfig extends dom.DomConfig {
 	/** Enable visual mask overlay during operations (default: false) */
 	enableMask?: boolean
+	/** Maximum number of interactive elements to include in the LLM prompt.
+	 *  When set, elements are prioritized by viewport membership, isNew flag, and DOM order.
+	 *  The selectorMap is unaffected — all elements remain actionable.
+	 *  undefined = no cap (backward compatible). */
+	maxElements?: number
 }
 
 /**
@@ -47,6 +55,52 @@ export interface ActionResult {
 }
 
 /**
+ * Lightweight snapshot of page state for computing diffs after actions.
+ * Designed to be very fast to capture (<5ms).
+ */
+export interface StateSummary {
+	url: string
+	elementCount: number
+}
+
+/**
+ * Compare two state snapshots and return a human-readable description of changes.
+ * Returns an empty string if nothing meaningful changed.
+ */
+export function diffState(before: StateSummary, after: StateSummary): string {
+	const changes: string[] = []
+
+	// URL change
+	if (before.url !== after.url) {
+		// Show just pathnames for brevity, fall back to full URL if parsing fails
+		let beforeLabel = before.url
+		let afterLabel = after.url
+		try {
+			const bUrl = new URL(before.url)
+			const aUrl = new URL(after.url)
+			if (bUrl.origin === aUrl.origin) {
+				beforeLabel = bUrl.pathname + bUrl.search + bUrl.hash
+				afterLabel = aUrl.pathname + aUrl.search + aUrl.hash
+			}
+		} catch {
+			// keep full URLs
+		}
+		changes.push(`URL changed: ${beforeLabel} → ${afterLabel}`)
+	}
+
+	// Element count change
+	const diff = after.elementCount - before.elementCount
+	if (diff > 0) {
+		changes.push(`${diff} new interactive element${diff === 1 ? '' : 's'} appeared`)
+	} else if (diff < 0) {
+		const removed = -diff
+		changes.push(`${removed} element${removed === 1 ? '' : 's'} removed`)
+	}
+
+	return changes.join(', ')
+}
+
+/**
  * The contract that all page controller implementations must satisfy.
  *
  * Implemented by:
@@ -59,6 +113,7 @@ export interface IPageController {
 	getCurrentUrl(): Promise<string>
 	getLastUpdateTime(): Promise<number>
 	getBrowserState(): Promise<BrowserState>
+	getStateSummary(): Promise<StateSummary>
 
 	// -- DOM Tree --
 	updateTree(): Promise<string>
@@ -80,6 +135,9 @@ export interface IPageController {
 		index?: number
 	}): Promise<ActionResult>
 	executeJavascript(script: string): Promise<ActionResult>
+	pressKey(key: string, modifiers?: string[]): Promise<ActionResult>
+	hoverElement(index: number): Promise<ActionResult>
+	clearAndType(index: number, text: string): Promise<ActionResult>
 
 	// -- Mask --
 	showMask(): Promise<void>
@@ -165,6 +223,17 @@ export class PageController extends EventTarget implements IPageController {
 	}
 
 	/**
+	 * Get a lightweight state snapshot for diffing before/after actions.
+	 * Fast (<5ms) — just reads current URL and selector map size.
+	 */
+	async getStateSummary(): Promise<StateSummary> {
+		return {
+			url: window.location.href,
+			elementCount: this.selectorMap.size,
+		}
+	}
+
+	/**
 	 * Get structured browser state for LLM consumption.
 	 * Automatically calls updateTree() to refresh the DOM state.
 	 */
@@ -230,7 +299,9 @@ export class PageController extends EventTarget implements IPageController {
 			interactiveBlacklist: blacklist,
 		})
 
-		this.simplifiedHTML = dom.flatTreeToString(this.flatTree, this.config.includeAttributes)
+		this.simplifiedHTML = dom.flatTreeToString(this.flatTree, this.config.includeAttributes, {
+			maxElements: this.config.maxElements,
+		})
 
 		this.selectorMap.clear()
 		this.selectorMap = dom.getSelectorMap(this.flatTree)
@@ -418,6 +489,69 @@ export class PageController extends EventTarget implements IPageController {
 			return {
 				success: false,
 				message: `❌ Error executing JavaScript: ${error}`,
+			}
+		}
+	}
+
+	/**
+	 * Press a keyboard key, optionally with modifiers
+	 */
+	async pressKey(key: string, modifiers?: string[]): Promise<ActionResult> {
+		try {
+			await pressKeyAction(key, modifiers)
+			const modStr = modifiers?.length ? ` with modifiers [${modifiers.join(', ')}]` : ''
+			return {
+				success: true,
+				message: `✅ Pressed key (${key})${modStr}.`,
+			}
+		} catch (error) {
+			return {
+				success: false,
+				message: `❌ Failed to press key: ${error}`,
+			}
+		}
+	}
+
+	/**
+	 * Hover over an element by index
+	 */
+	async hoverElement(index: number): Promise<ActionResult> {
+		try {
+			this.assertIndexed()
+			const element = getElementByIndex(this.selectorMap, index)
+			const elemText = this.elementTextMap.get(index)
+			await hoverElementAction(element)
+
+			return {
+				success: true,
+				message: `✅ Hovered over element (${elemText ?? index}).`,
+			}
+		} catch (error) {
+			return {
+				success: false,
+				message: `❌ Failed to hover element: ${error}`,
+			}
+		}
+	}
+
+	/**
+	 * Clear existing text in a field and type new text
+	 */
+	async clearAndType(index: number, text: string): Promise<ActionResult> {
+		try {
+			this.assertIndexed()
+			const element = getElementByIndex(this.selectorMap, index)
+			const elemText = this.elementTextMap.get(index)
+			await clearAndTypeElement(element, text)
+
+			return {
+				success: true,
+				message: `✅ Cleared and typed (${text}) into element (${elemText ?? index}).`,
+			}
+		} catch (error) {
+			return {
+				success: false,
+				message: `❌ Failed to clear and type: ${error}`,
 			}
 		}
 	}

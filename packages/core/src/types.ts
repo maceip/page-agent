@@ -7,6 +7,15 @@ import type { PageAgentTool } from './tools'
 /** Supported UI languages */
 export type SupportedLanguage = 'en-US' | 'zh-CN'
 
+/**
+ * Structured plan produced by the planning phase.
+ * Contains a list of sub-goals that the agent will follow in order.
+ */
+export interface AgentPlan {
+	sub_goals: string[]
+	current_sub_goal_index: number
+}
+
 export interface AgentConfig extends LLMConfig {
 	language?: SupportedLanguage
 
@@ -15,6 +24,13 @@ export interface AgentConfig extends LLMConfig {
 	 * @default 40
 	 */
 	maxSteps?: number
+
+	/**
+	 * Number of times the same action (name + input) must repeat within a
+	 * recent window before loop detection triggers a warning.
+	 * @default 3
+	 */
+	loopDetectionThreshold?: number
 
 	/**
 	 * Custom tools to extend PageAgent capabilities
@@ -154,6 +170,20 @@ export interface AgentConfig extends LLMConfig {
 	 * @experimental Use with caution - incorrect prompts may break agent behavior.
 	 */
 	customSystemPrompt?: string
+
+	/**
+	 * Enable the planning phase before the main action loop.
+	 * When enabled, the agent makes a dedicated LLM call to produce a structured
+	 * plan with numbered sub-goals before starting the step loop.
+	 * @default true
+	 */
+	enablePlanning?: boolean
+
+	/**
+	 * Delay between steps in seconds.
+	 * @default 0.4
+	 */
+	stepDelay?: number
 }
 
 /**
@@ -178,6 +208,8 @@ export interface AgentReflection {
  */
 export interface MacroToolInput extends Partial<AgentReflection> {
 	action: Record<string, any>
+	/** Signal sub-goal progress: "completed", "still working", or "need to revise plan" */
+	current_sub_goal?: string
 }
 
 /**
@@ -273,6 +305,8 @@ export type AgentStatus = 'idle' | 'running' | 'completed' | 'error'
  */
 export type AgentActivity =
 	| { type: 'thinking' }
+	| { type: 'planning' }
+	| { type: 'plan_complete'; sub_goals: string[] }
 	| { type: 'executing'; tool: string; input: unknown }
 	| { type: 'executed'; tool: string; input: unknown; output: string; duration: number }
 	| { type: 'retrying'; attempt: number; maxAttempts: number }

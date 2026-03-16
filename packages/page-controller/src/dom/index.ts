@@ -149,6 +149,17 @@ interface TreeNode {
 }
 
 /**
+ * Options for element capping in flatTreeToString.
+ * When maxElements is set and the total interactive element count exceeds it,
+ * elements are prioritized by viewport membership, isNew flag, and DOM order.
+ * Omitted sections are replaced with summary lines.
+ */
+export interface ElementCappingOptions {
+	/** Maximum number of interactive elements to include in the output. undefined = no cap. */
+	maxElements?: number
+}
+
+/**
  * 对应 python 中的 views::clickable_elements_to_string,
  * 将 dom 信息处理成适合 llm 阅读的文本格式
  * @形如
@@ -171,7 +182,11 @@ interface TreeNode {
  *
  * @todo 数据脱敏过滤器
  */
-export function flatTreeToString(flatTree: FlatDomTree, includeAttributes?: string[]): string {
+export function flatTreeToString(
+	flatTree: FlatDomTree,
+	includeAttributes?: string[],
+	cappingOptions?: ElementCappingOptions
+): string {
 	const DEFAULT_INCLUDE_ATTRIBUTES = [
 		'title',
 		'type',
@@ -271,6 +286,52 @@ export function flatTreeToString(flatTree: FlatDomTree, includeAttributes?: stri
 
 	setParentReferences(rootNode)
 
+	// --- Element capping: determine which interactive elements to include ---
+	const maxElements = cappingOptions?.maxElements
+
+	// Collect all interactive elements in DOM order for capping
+	let includedIndices: Set<number> | null = null // null = include all
+	let totalInteractiveCount = 0
+
+	if (maxElements !== undefined && maxElements > 0) {
+		const interactiveElements: {
+			highlightIndex: number
+			isInViewport: boolean
+			isNew: boolean
+			domOrder: number
+		}[] = []
+
+		// Walk the flat tree map to collect interactive elements with their properties
+		for (const nodeId in flatTree.map) {
+			const node = flatTree.map[nodeId]
+			if (node.isInteractive && typeof node.highlightIndex === 'number') {
+				interactiveElements.push({
+					highlightIndex: node.highlightIndex,
+					isInViewport: !!(node as ElementDomNode).isInViewport,
+					isNew: !!(node as ElementDomNode).isNew,
+					domOrder: node.highlightIndex, // highlightIndex is assigned in DOM order
+				})
+			}
+		}
+
+		totalInteractiveCount = interactiveElements.length
+
+		if (totalInteractiveCount > maxElements) {
+			// Priority scoring: viewport (10000) > isNew (1000) > lower DOM order (tiebreaker)
+			interactiveElements.sort((a, b) => {
+				const scoreA = (a.isInViewport ? 10000 : 0) + (a.isNew ? 1000 : 0)
+				const scoreB = (b.isInViewport ? 10000 : 0) + (b.isNew ? 1000 : 0)
+				if (scoreA !== scoreB) return scoreB - scoreA // higher score first
+				return a.domOrder - b.domOrder // lower DOM order first (tiebreaker)
+			})
+
+			includedIndices = new Set<number>()
+			for (let i = 0; i < maxElements; i++) {
+				includedIndices.add(interactiveElements[i].highlightIndex)
+			}
+		}
+	}
+
 	// Helper to check if text node has parent with highlight index
 	const hasParentWithHighlightIndex = (node: TreeNode): boolean => {
 		let current = node.parent
@@ -288,6 +349,18 @@ export function flatTreeToString(flatTree: FlatDomTree, includeAttributes?: stri
 	// 	return node.parent?.type === 'element' && node.parent.isTopElement === true
 	// }
 
+	// Track consecutive omissions for summary lines
+	let omittedRun = 0
+
+	const flushOmitted = (result: string[], depthStr: string): void => {
+		if (omittedRun > 0) {
+			result.push(
+				`${depthStr}[... ${omittedRun} more element${omittedRun === 1 ? '' : 's'}, scroll or refine to reveal]`
+			)
+			omittedRun = 0
+		}
+	}
+
 	// Main processing function
 	const processNode = (node: TreeNode, depth: number, result: string[]): void => {
 		let nextDepth = depth
@@ -296,6 +369,19 @@ export function flatTreeToString(flatTree: FlatDomTree, includeAttributes?: stri
 		if (node.type === 'element') {
 			// Add element with highlight_index
 			if (node.highlightIndex !== undefined) {
+				// Check if this element is capped out
+				if (includedIndices !== null && !includedIndices.has(node.highlightIndex)) {
+					omittedRun++
+					// Still process children — they may contain included elements or text
+					for (const child of node.children) {
+						processNode(child, depth, result)
+					}
+					return
+				}
+
+				// Flush any pending omission summary before emitting this element
+				flushOmitted(result, depthStr)
+
 				nextDepth += 1
 
 				const text = getAllTextTillNextClickableElement(node)
@@ -407,6 +493,8 @@ export function flatTreeToString(flatTree: FlatDomTree, includeAttributes?: stri
 				node.parent.isVisible &&
 				node.parent.isTopElement
 			) {
+				// Flush omitted summary before text
+				flushOmitted(result, depthStr)
 				result.push(`${depthStr}${node.text ?? ''}`)
 			}
 		}
@@ -414,6 +502,20 @@ export function flatTreeToString(flatTree: FlatDomTree, includeAttributes?: stri
 
 	const result: string[] = []
 	processNode(rootNode, 0, result)
+
+	// Flush any trailing omission summary
+	flushOmitted(result, '')
+
+	// Add overall summary if elements were capped
+	if (includedIndices !== null && totalInteractiveCount > 0) {
+		const omittedCount = totalInteractiveCount - includedIndices.size
+		if (omittedCount > 0) {
+			result.push(
+				`\n[${omittedCount} of ${totalInteractiveCount} interactive elements omitted — showing ${includedIndices.size} most relevant. Scroll to reveal more.]`
+			)
+		}
+	}
+
 	return result.join('\n')
 }
 

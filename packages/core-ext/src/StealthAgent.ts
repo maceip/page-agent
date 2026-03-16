@@ -31,6 +31,7 @@ export interface StealthConfig {
 	chameleon?: ChameleonConfig
 }
 
+// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents -- PageAgentCoreConfig resolves correctly at runtime; lint sees error type due to cross-package resolution
 export type StealthAgentConfig = PageAgentCoreConfig & StealthConfig
 
 /**

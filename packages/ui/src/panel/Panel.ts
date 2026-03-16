@@ -6,12 +6,7 @@ import type { AgentActivity, PanelAgentAdapter } from './types'
 import styles from './Panel.module.css'
 
 /** Available hotpoint positions */
-type HotpointPosition =
-	| 'bottom-center'
-	| 'bottom-right'
-	| 'bottom-left'
-	| 'top-right'
-	| 'top-left'
+type HotpointPosition = 'bottom-center' | 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'
 
 /**
  * Panel configuration

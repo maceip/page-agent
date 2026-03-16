@@ -15,9 +15,20 @@
  *   const core = new PageAgentCore({ pageController: remote, ... })
  *   // PageAgentCore now drives the remote browser through the mirror
  */
-import type { ActionResult, BrowserState, IPageController } from '@page-agent/page-controller'
+import type {
+	ActionResult,
+	BrowserState,
+	IPageController,
+	StateSummary,
+} from '@page-agent/page-controller'
 
-import type { IHotLayer, RemoteFocusEvent, RemoteSelectEvent, RemoteTypeEvent } from './layers/hot'
+import type {
+	IHotLayer,
+	RemoteFocusEvent,
+	RemoteKeyboardEvent,
+	RemoteSelectEvent,
+	RemoteTypeEvent,
+} from './layers/hot'
 import type { MicroDOMSnapshot, SpatialElement } from './types'
 
 // ---------------------------------------------------------------------------
@@ -63,6 +74,13 @@ export class RemotePageController extends EventTarget implements IPageController
 
 	async getLastUpdateTime(): Promise<number> {
 		return this.lastUpdateTime
+	}
+
+	async getStateSummary(): Promise<StateSummary> {
+		return {
+			url: this.snapshot?.url ?? '',
+			elementCount: this.elementMap.size,
+		}
 	}
 
 	/**
@@ -333,6 +351,125 @@ export class RemotePageController extends EventTarget implements IPageController
 		return {
 			success: false,
 			message: 'JavaScript execution not available in remote mode. Use element actions instead.',
+		}
+	}
+
+	async pressKey(key: string, modifiers?: string[]): Promise<ActionResult> {
+		try {
+			const modObj = modifiers?.length
+				? {
+						ctrl: modifiers.includes('Ctrl') || modifiers.includes('Control'),
+						shift: modifiers.includes('Shift'),
+						alt: modifiers.includes('Alt'),
+						meta: modifiers.includes('Meta') || modifiers.includes('Command'),
+					}
+				: undefined
+
+			// Map common key names to code values
+			const codeMap: Record<string, string> = {
+				Enter: 'Enter',
+				Escape: 'Escape',
+				Tab: 'Tab',
+				Backspace: 'Backspace',
+				Delete: 'Delete',
+				Space: 'Space',
+				' ': 'Space',
+				ArrowDown: 'ArrowDown',
+				ArrowUp: 'ArrowUp',
+				ArrowLeft: 'ArrowLeft',
+				ArrowRight: 'ArrowRight',
+			}
+			const code = codeMap[key] || (key.length === 1 ? `Key${key.toUpperCase()}` : key)
+
+			const keyboardEvent: RemoteKeyboardEvent = {
+				type: 'keydown',
+				key,
+				code,
+				modifiers: modObj,
+				timestamp: this.now(),
+			}
+			await this.hotLayer.sendInputEvent(keyboardEvent)
+
+			const keyupEvent: RemoteKeyboardEvent = {
+				type: 'keyup',
+				key,
+				code,
+				modifiers: modObj,
+				timestamp: this.now(),
+			}
+			await this.hotLayer.sendInputEvent(keyupEvent)
+
+			const modStr = modifiers?.length ? ` with modifiers [${modifiers.join(', ')}]` : ''
+			return { success: true, message: `Pressed key (${key})${modStr}.` }
+		} catch (error) {
+			return { success: false, message: `Failed to press key: ${error}` }
+		}
+	}
+
+	async hoverElement(index: number): Promise<ActionResult> {
+		try {
+			const el = this.getElement(index)
+			const x = Math.round(el.rect.x + el.rect.w / 2)
+			const y = Math.round(el.rect.y + el.rect.h / 2)
+			await this.hotLayer.sendInputEvent({
+				type: 'mousemove',
+				x,
+				y,
+				elementId: index,
+				timestamp: this.now(),
+			})
+			const desc = el.label || el.tag
+			return { success: true, message: `Hovered over element [${index}] (${desc}).` }
+		} catch (error) {
+			return { success: false, message: `Failed to hover element: ${error}` }
+		}
+	}
+
+	async clearAndType(index: number, text: string): Promise<ActionResult> {
+		try {
+			const el = this.getElement(index)
+			// Focus the element
+			const focusEvent: RemoteFocusEvent = {
+				type: 'focus',
+				elementId: index,
+				timestamp: this.now(),
+			}
+			await this.hotLayer.sendInputEvent(focusEvent)
+
+			// Select all (Ctrl+A) then delete
+			const selectAllDown: RemoteKeyboardEvent = {
+				type: 'keydown',
+				key: 'a',
+				code: 'KeyA',
+				modifiers: { ctrl: true },
+				timestamp: this.now(),
+			}
+			await this.hotLayer.sendInputEvent(selectAllDown)
+
+			const deleteKey: RemoteKeyboardEvent = {
+				type: 'keydown',
+				key: 'Backspace',
+				code: 'Backspace',
+				timestamp: this.now(),
+			}
+			await this.hotLayer.sendInputEvent(deleteKey)
+
+			// Type new text
+			const typeEvent: RemoteTypeEvent = {
+				type: 'type',
+				elementId: index,
+				text,
+				timestamp: this.now(),
+			}
+			await this.hotLayer.sendInputEvent(typeEvent)
+
+			const desc = el.label || el.tag
+			return {
+				success: true,
+				message: `Cleared and typed (${text}) into element [${index}] (${desc}).`,
+			}
+		} catch (error) {
+			return { success: false, message: `Failed to clear and type: ${error}` }
 		}
 	}
 
