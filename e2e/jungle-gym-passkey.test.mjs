@@ -749,6 +749,148 @@ async function main() {
 			)
 		})
 
+		// ══════════════════════════════════════════════════════════
+		// Phase 8: Additional action coverage tests
+		// ══════════════════════════════════════════════════════════
+
+		// Navigate to Settings > General tab for select/textarea/contenteditable tests
+		await test(`[${vp.label}] Navigate to Settings General tab for Phase 8`, async () => {
+			// Open user dropdown
+			await clickByText(page, 'Jane Doe')
+			await new Promise((r) => setTimeout(r, 200))
+			// Click Account Settings
+			await clickByText(page, 'Account Settings')
+			await new Promise((r) => setTimeout(r, 200))
+			// Click General tab
+			await clickByText(page, 'General')
+			await new Promise((r) => setTimeout(r, 200))
+
+			const isVisible = await page.evaluate(
+				() => document.getElementById('tab-general').style.display !== 'none'
+			)
+			assert.ok(isVisible, 'General tab should be visible')
+		})
+
+		await test(`[${vp.label}] selectOptionElement changes timezone dropdown`, async () => {
+			const result = await page.evaluate(async () => {
+				const tree = PageController.getFlatTree({})
+				const selectorMap = PageController.getSelectorMap(tree)
+				for (const [idx, node] of selectorMap.entries()) {
+					if (node.ref && node.ref.id === 'settings-timezone') {
+						const element = PageController.getElementByIndex(selectorMap, idx)
+						await PageController.selectOptionElement(element, 'America/New_York')
+						return element.value
+					}
+				}
+				throw new Error('Timezone select not found')
+			})
+			assert.equal(result, 'America/New_York')
+		})
+
+		await test(`[${vp.label}] inputTextElement works on textarea`, async () => {
+			const result = await page.evaluate(async () => {
+				const tree = PageController.getFlatTree({})
+				const selectorMap = PageController.getSelectorMap(tree)
+				for (const [idx, node] of selectorMap.entries()) {
+					if (node.ref && node.ref.id === 'settings-bio') {
+						const element = PageController.getElementByIndex(selectorMap, idx)
+						await PageController.inputTextElement(element, 'Hello from e2e test')
+						return element.value
+					}
+				}
+				throw new Error('Bio textarea not found')
+			})
+			assert.equal(result, 'Hello from e2e test')
+		})
+
+		await test(`[${vp.label}] inputTextElement works on contenteditable`, async () => {
+			const result = await page.evaluate(async () => {
+				const tree = PageController.getFlatTree({})
+				const selectorMap = PageController.getSelectorMap(tree)
+				for (const [idx, node] of selectorMap.entries()) {
+					if (node.ref && node.ref.id === 'settings-notes') {
+						const element = PageController.getElementByIndex(selectorMap, idx)
+						await PageController.inputTextElement(element, 'Contenteditable test text')
+						return element.innerText
+					}
+				}
+				throw new Error('Notes contenteditable not found')
+			})
+			assert.equal(result, 'Contenteditable test text')
+		})
+
+		await test(`[${vp.label}] pressKeyAction supports modifier keys`, async () => {
+			const result = await page.evaluate(async () => {
+				let capturedEvent = null
+				const handler = (e) => {
+					capturedEvent = { key: e.key, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey }
+				}
+				document.body.addEventListener('keydown', handler)
+				document.body.focus()
+				await PageController.pressKeyAction('a', ['Ctrl', 'Shift'])
+				document.body.removeEventListener('keydown', handler)
+				return capturedEvent
+			})
+			assert.ok(result, 'Should have captured keydown event')
+			assert.equal(result.key, 'a')
+			assert.equal(result.ctrlKey, true)
+			assert.equal(result.shiftKey, true)
+		})
+
+		await test(`[${vp.label}] hoverElementAction dispatches hover events`, async () => {
+			const result = await page.evaluate(async () => {
+				const tree = PageController.getFlatTree({})
+				const selectorMap = PageController.getSelectorMap(tree)
+				const [idx] = selectorMap.entries().next().value
+				const element = PageController.getElementByIndex(selectorMap, idx)
+				let gotMouseOver = false
+				element.addEventListener('mouseover', () => {
+					gotMouseOver = true
+				})
+				await PageController.hoverElementAction(element)
+				return gotMouseOver
+			})
+			assert.ok(result, 'hoverElementAction should dispatch mouseover event')
+		})
+
+		await test(`[${vp.label}] clearAndTypeElement clears then types`, async () => {
+			const result = await page.evaluate(async () => {
+				const tree = PageController.getFlatTree({})
+				const selectorMap = PageController.getSelectorMap(tree)
+				for (const [idx, node] of selectorMap.entries()) {
+					if (node.ref && node.ref.id === 'settings-bio') {
+						const element = PageController.getElementByIndex(selectorMap, idx)
+						await PageController.inputTextElement(element, 'old text')
+						await PageController.clearAndTypeElement(element, 'new text')
+						return element.value
+					}
+				}
+				throw new Error('Bio textarea not found')
+			})
+			assert.equal(result, 'new text')
+		})
+
+		await test(`[${vp.label}] getElementByIndex throws for invalid index`, async () => {
+			const threw = await page.evaluate(() => {
+				const tree = PageController.getFlatTree({})
+				const selectorMap = PageController.getSelectorMap(tree)
+				try {
+					PageController.getElementByIndex(selectorMap, 99999)
+					return false
+				} catch (e) {
+					return e.message.includes('99999')
+				}
+			})
+			assert.ok(threw, 'getElementByIndex should throw for invalid index')
+		})
+
+		await test(`[${vp.label}] scrollVertically returns scroll status`, async () => {
+			const result = await page.evaluate(async () => {
+				return await PageController.scrollVertically(true, 200)
+			})
+			assert.ok(typeof result === 'string', 'scrollVertically should return a status string')
+		})
+
 		await test(`[${vp.label}] Element count changes when navigating pages`, async () => {
 			const countBefore = await getElementCount(page)
 

@@ -18,4 +18,10 @@ export {
 	clickElement,
 	inputTextElement,
 	getElementByIndex,
+	selectOptionElement,
+	hoverElementAction,
+	clearAndTypeElement,
+	scrollVertically,
+	scrollHorizontally,
+	movePointerToElement,
 } from '../packages/page-controller/src/actions'

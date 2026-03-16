@@ -23,13 +23,19 @@ var PageController = (() => {
 	// e2e/page-controller-entry.ts
 	var page_controller_entry_exports = {}
 	__export(page_controller_entry_exports, {
+		clearAndTypeElement: () => clearAndTypeElement,
 		clickElement: () => clickElement,
 		flatTreeToString: () => flatTreeToString,
 		getElementByIndex: () => getElementByIndex,
 		getFlatTree: () => getFlatTree,
 		getSelectorMap: () => getSelectorMap,
+		hoverElementAction: () => hoverElementAction,
 		inputTextElement: () => inputTextElement,
+		movePointerToElement: () => movePointerToElement,
 		pressKeyAction: () => pressKeyAction,
+		scrollHorizontally: () => scrollHorizontally,
+		scrollVertically: () => scrollVertically,
+		selectOptionElement: () => selectOptionElement,
 	})
 
 	// packages/page-controller/src/dom/dom_tree/index.js
@@ -1716,6 +1722,19 @@ var PageController = (() => {
 		await waitFor(0.1)
 		blurLastClickedElement()
 	}
+	async function selectOptionElement(selectElement, optionText) {
+		if (!(selectElement instanceof HTMLSelectElement)) {
+			throw new Error('Element is not a select element')
+		}
+		const options = Array.from(selectElement.options)
+		const option = options.find((opt) => opt.textContent?.trim() === optionText.trim())
+		if (!option) {
+			throw new Error(`Option with text "${optionText}" not found in select element`)
+		}
+		selectElement.value = option.value
+		selectElement.dispatchEvent(new Event('change', { bubbles: true }))
+		await waitFor(0.1)
+	}
 	async function pressKeyAction(key, modifiers) {
 		const mods = {
 			ctrlKey: modifiers?.includes('Ctrl') || modifiers?.includes('Control') || false,
@@ -1754,12 +1773,267 @@ var PageController = (() => {
 		target.dispatchEvent(new KeyboardEvent('keyup', eventInit))
 		await waitFor(0.1)
 	}
+	async function hoverElementAction(element) {
+		await scrollIntoViewIfNeeded(element)
+		await movePointerToElement(element)
+		element.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, cancelable: false }))
+		element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true }))
+		await waitFor(0.2)
+	}
+	async function clearAndTypeElement(element, text) {
+		const isContentEditable = element.isContentEditable
+		if (
+			!(element instanceof HTMLInputElement) &&
+			!(element instanceof HTMLTextAreaElement) &&
+			!isContentEditable
+		) {
+			throw new Error('Element is not an input, textarea, or contenteditable')
+		}
+		await clickElement(element)
+		if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+			element.select()
+			element.dispatchEvent(
+				new InputEvent('beforeinput', {
+					bubbles: true,
+					cancelable: true,
+					inputType: 'deleteContentBackward',
+				})
+			)
+			if (element instanceof HTMLTextAreaElement) {
+				nativeTextAreaValueSetter.call(element, '')
+			} else {
+				nativeInputValueSetter.call(element, '')
+			}
+			element.dispatchEvent(new Event('input', { bubbles: true }))
+		} else if (isContentEditable) {
+			if (
+				element.dispatchEvent(
+					new InputEvent('beforeinput', {
+						bubbles: true,
+						cancelable: true,
+						inputType: 'deleteContent',
+					})
+				)
+			) {
+				element.innerText = ''
+				element.dispatchEvent(
+					new InputEvent('input', {
+						bubbles: true,
+						inputType: 'deleteContent',
+					})
+				)
+			}
+		}
+		await waitFor(0.05)
+		await inputTextElement(element, text)
+	}
 	async function scrollIntoViewIfNeeded(element) {
 		const el = element
 		if (typeof el.scrollIntoViewIfNeeded === 'function') {
 			el.scrollIntoViewIfNeeded()
 		} else {
 			element.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' })
+		}
+	}
+	async function scrollVertically(down, scroll_amount, element) {
+		if (element) {
+			const targetElement = element
+			let currentElement = targetElement
+			let scrollSuccess = false
+			let scrolledElement = null
+			let scrollDelta = 0
+			let attempts = 0
+			const dy2 = scroll_amount
+			while (currentElement && attempts < 10) {
+				const computedStyle = window.getComputedStyle(currentElement)
+				const hasScrollableY = /(auto|scroll|overlay)/.test(computedStyle.overflowY)
+				const canScrollVertically = currentElement.scrollHeight > currentElement.clientHeight
+				if (hasScrollableY && canScrollVertically) {
+					const beforeScroll = currentElement.scrollTop
+					const maxScroll = currentElement.scrollHeight - currentElement.clientHeight
+					let scrollAmount = dy2 / 3
+					if (scrollAmount > 0) {
+						scrollAmount = Math.min(scrollAmount, maxScroll - beforeScroll)
+					} else {
+						scrollAmount = Math.max(scrollAmount, -beforeScroll)
+					}
+					currentElement.scrollTop = beforeScroll + scrollAmount
+					const afterScroll = currentElement.scrollTop
+					const actualScrollDelta = afterScroll - beforeScroll
+					if (Math.abs(actualScrollDelta) > 0.5) {
+						scrollSuccess = true
+						scrolledElement = currentElement
+						scrollDelta = actualScrollDelta
+						break
+					}
+				}
+				if (currentElement === document.body || currentElement === document.documentElement) {
+					break
+				}
+				currentElement = currentElement.parentElement
+				attempts++
+			}
+			if (scrollSuccess) {
+				return `Scrolled container (${scrolledElement?.tagName}) by ${scrollDelta}px`
+			} else {
+				return `No scrollable container found for element (${targetElement.tagName})`
+			}
+		}
+		const dy = scroll_amount
+		const bigEnough = (el2) => el2.clientHeight >= window.innerHeight * 0.5
+		const canScroll = (el2) =>
+			el2 &&
+			/(auto|scroll|overlay)/.test(getComputedStyle(el2).overflowY) &&
+			el2.scrollHeight > el2.clientHeight &&
+			bigEnough(el2)
+		let el = document.activeElement
+		while (el && !canScroll(el) && el !== document.body) el = el.parentElement
+		el = canScroll(el)
+			? el
+			: Array.from(document.querySelectorAll('*')).find(canScroll) ||
+				document.scrollingElement ||
+				document.documentElement
+		if (
+			el === document.scrollingElement ||
+			el === document.documentElement ||
+			el === document.body
+		) {
+			const scrollBefore = window.scrollY
+			const scrollMax = document.documentElement.scrollHeight - window.innerHeight
+			window.scrollBy(0, dy)
+			const scrollAfter = window.scrollY
+			const scrolled = scrollAfter - scrollBefore
+			if (Math.abs(scrolled) < 1) {
+				return dy > 0
+					? `\u26A0\uFE0F Already at the bottom of the page, cannot scroll down further.`
+					: `\u26A0\uFE0F Already at the top of the page, cannot scroll up further.`
+			}
+			const reachedBottom = dy > 0 && scrollAfter >= scrollMax - 1
+			const reachedTop = dy < 0 && scrollAfter <= 1
+			if (reachedBottom)
+				return `\u2705 Scrolled page by ${scrolled}px. Reached the bottom of the page.`
+			if (reachedTop) return `\u2705 Scrolled page by ${scrolled}px. Reached the top of the page.`
+			return `\u2705 Scrolled page by ${scrolled}px.`
+		} else {
+			const scrollBefore = el.scrollTop
+			const scrollMax = el.scrollHeight - el.clientHeight
+			el.scrollBy({ top: dy, behavior: 'smooth' })
+			await waitFor(0.1)
+			const scrollAfter = el.scrollTop
+			const scrolled = scrollAfter - scrollBefore
+			if (Math.abs(scrolled) < 1) {
+				return dy > 0
+					? `\u26A0\uFE0F Already at the bottom of container (${el.tagName}), cannot scroll down further.`
+					: `\u26A0\uFE0F Already at the top of container (${el.tagName}), cannot scroll up further.`
+			}
+			const reachedBottom = dy > 0 && scrollAfter >= scrollMax - 1
+			const reachedTop = dy < 0 && scrollAfter <= 1
+			if (reachedBottom)
+				return `\u2705 Scrolled container (${el.tagName}) by ${scrolled}px. Reached the bottom.`
+			if (reachedTop)
+				return `\u2705 Scrolled container (${el.tagName}) by ${scrolled}px. Reached the top.`
+			return `\u2705 Scrolled container (${el.tagName}) by ${scrolled}px.`
+		}
+	}
+	async function scrollHorizontally(right, scroll_amount, element) {
+		if (element) {
+			const targetElement = element
+			let currentElement = targetElement
+			let scrollSuccess = false
+			let scrolledElement = null
+			let scrollDelta = 0
+			let attempts = 0
+			const dx2 = right ? scroll_amount : -scroll_amount
+			while (currentElement && attempts < 10) {
+				const computedStyle = window.getComputedStyle(currentElement)
+				const hasScrollableX = /(auto|scroll|overlay)/.test(computedStyle.overflowX)
+				const canScrollHorizontally = currentElement.scrollWidth > currentElement.clientWidth
+				if (hasScrollableX && canScrollHorizontally) {
+					const beforeScroll = currentElement.scrollLeft
+					const maxScroll = currentElement.scrollWidth - currentElement.clientWidth
+					let scrollAmount = dx2 / 3
+					if (scrollAmount > 0) {
+						scrollAmount = Math.min(scrollAmount, maxScroll - beforeScroll)
+					} else {
+						scrollAmount = Math.max(scrollAmount, -beforeScroll)
+					}
+					currentElement.scrollLeft = beforeScroll + scrollAmount
+					const afterScroll = currentElement.scrollLeft
+					const actualScrollDelta = afterScroll - beforeScroll
+					if (Math.abs(actualScrollDelta) > 0.5) {
+						scrollSuccess = true
+						scrolledElement = currentElement
+						scrollDelta = actualScrollDelta
+						break
+					}
+				}
+				if (currentElement === document.body || currentElement === document.documentElement) {
+					break
+				}
+				currentElement = currentElement.parentElement
+				attempts++
+			}
+			if (scrollSuccess) {
+				return `Scrolled container (${scrolledElement?.tagName}) horizontally by ${scrollDelta}px`
+			} else {
+				return `No horizontally scrollable container found for element (${targetElement.tagName})`
+			}
+		}
+		const dx = right ? scroll_amount : -scroll_amount
+		const bigEnough = (el2) => el2.clientWidth >= window.innerWidth * 0.5
+		const canScroll = (el2) =>
+			el2 &&
+			/(auto|scroll|overlay)/.test(getComputedStyle(el2).overflowX) &&
+			el2.scrollWidth > el2.clientWidth &&
+			bigEnough(el2)
+		let el = document.activeElement
+		while (el && !canScroll(el) && el !== document.body) el = el.parentElement
+		el = canScroll(el)
+			? el
+			: Array.from(document.querySelectorAll('*')).find(canScroll) ||
+				document.scrollingElement ||
+				document.documentElement
+		if (
+			el === document.scrollingElement ||
+			el === document.documentElement ||
+			el === document.body
+		) {
+			const scrollBefore = window.scrollX
+			const scrollMax = document.documentElement.scrollWidth - window.innerWidth
+			window.scrollBy(dx, 0)
+			const scrollAfter = window.scrollX
+			const scrolled = scrollAfter - scrollBefore
+			if (Math.abs(scrolled) < 1) {
+				return dx > 0
+					? `\u26A0\uFE0F Already at the right edge of the page, cannot scroll right further.`
+					: `\u26A0\uFE0F Already at the left edge of the page, cannot scroll left further.`
+			}
+			const reachedRight = dx > 0 && scrollAfter >= scrollMax - 1
+			const reachedLeft = dx < 0 && scrollAfter <= 1
+			if (reachedRight)
+				return `\u2705 Scrolled page by ${scrolled}px. Reached the right edge of the page.`
+			if (reachedLeft)
+				return `\u2705 Scrolled page by ${scrolled}px. Reached the left edge of the page.`
+			return `\u2705 Scrolled page horizontally by ${scrolled}px.`
+		} else {
+			const scrollBefore = el.scrollLeft
+			const scrollMax = el.scrollWidth - el.clientWidth
+			el.scrollBy({ left: dx, behavior: 'smooth' })
+			await waitFor(0.1)
+			const scrollAfter = el.scrollLeft
+			const scrolled = scrollAfter - scrollBefore
+			if (Math.abs(scrolled) < 1) {
+				return dx > 0
+					? `\u26A0\uFE0F Already at the right edge of container (${el.tagName}), cannot scroll right further.`
+					: `\u26A0\uFE0F Already at the left edge of container (${el.tagName}), cannot scroll left further.`
+			}
+			const reachedRight = dx > 0 && scrollAfter >= scrollMax - 1
+			const reachedLeft = dx < 0 && scrollAfter <= 1
+			if (reachedRight)
+				return `\u2705 Scrolled container (${el.tagName}) by ${scrolled}px. Reached the right edge.`
+			if (reachedLeft)
+				return `\u2705 Scrolled container (${el.tagName}) by ${scrolled}px. Reached the left edge.`
+			return `\u2705 Scrolled container (${el.tagName}) horizontally by ${scrolled}px.`
 		}
 	}
 	return __toCommonJS(page_controller_entry_exports)
