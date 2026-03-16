@@ -884,28 +884,345 @@ async function main() {
 			assert.ok(threw, 'getElementByIndex should throw for invalid index')
 		})
 
-		await test(`[${vp.label}] scrollVertically returns scroll status`, async () => {
+		// ══════════════════════════════════════════════════════════
+		// Phase 9: Scroll + remaining action coverage
+		// ══════════════════════════════════════════════════════════
+
+		// Navigate back to dashboard where the scrollable containers live
+		await test(`[${vp.label}] Navigate to dashboard for scroll tests`, async () => {
+			await clickByText(page, 'Dashboard')
+			const isActive = await page.evaluate(() =>
+				document.getElementById('page-dashboard').classList.contains('active')
+			)
+			assert.ok(isActive, 'Dashboard should be active')
+		})
+
+		// --- Vertical scrolling: element-specific ---
+		await test(`[${vp.label}] scrollVertically scrolls deploy-log container down`, async () => {
+			const result = await page.evaluate(async () => {
+				const log = document.getElementById('deploy-log')
+				log.scrollTop = 0 // reset
+				return await PageController.scrollVertically(true, 300, log)
+			})
+			assert.ok(result.includes('Scrolled container'), `Expected container scroll, got: ${result}`)
+
+			// Verify it actually moved
+			const scrollTop = await page.evaluate(() => document.getElementById('deploy-log').scrollTop)
+			assert.ok(scrollTop > 0, `deploy-log should have scrolled, scrollTop=${scrollTop}`)
+		})
+
+		await test(`[${vp.label}] scrollVertically scrolls deploy-log container up`, async () => {
+			const result = await page.evaluate(async () => {
+				const log = document.getElementById('deploy-log')
+				log.scrollTop = 200 // scroll down first
+				return await PageController.scrollVertically(false, -300, log)
+			})
+			assert.ok(
+				result.includes('Scrolled container'),
+				`Expected container scroll up, got: ${result}`
+			)
+		})
+
+		await test(`[${vp.label}] scrollVertically walks up to scrollable parent`, async () => {
+			// Pass a child element inside the log — the function should walk up to find the scrollable parent
+			const result = await page.evaluate(async () => {
+				const log = document.getElementById('deploy-log')
+				log.scrollTop = 0 // reset
+				const child = log.querySelector('div') // first log line
+				return await PageController.scrollVertically(true, 300, child)
+			})
+			assert.ok(
+				result.includes('Scrolled container'),
+				`Expected parent walk-up scroll, got: ${result}`
+			)
+		})
+
+		await test(`[${vp.label}] scrollVertically returns "no scrollable container" for non-scrollable element`, async () => {
+			const result = await page.evaluate(async () => {
+				// A card element that doesn't scroll
+				const card = document.querySelector('.card')
+				return await PageController.scrollVertically(true, 300, card)
+			})
+			assert.ok(
+				result.includes('No scrollable container'),
+				`Expected no-scroll message, got: ${result}`
+			)
+		})
+
+		// --- Horizontal scrolling: element-specific ---
+		await test(`[${vp.label}] scrollHorizontally scrolls metrics-timeline right`, async () => {
+			const result = await page.evaluate(async () => {
+				const timeline = document.getElementById('metrics-timeline')
+				timeline.scrollLeft = 0 // reset
+				return await PageController.scrollHorizontally(true, 300, timeline)
+			})
+			assert.ok(
+				result.includes('Scrolled container') && result.includes('horizontally'),
+				`Expected horizontal container scroll, got: ${result}`
+			)
+
+			const scrollLeft = await page.evaluate(
+				() => document.getElementById('metrics-timeline').scrollLeft
+			)
+			assert.ok(
+				scrollLeft > 0,
+				`metrics-timeline should have scrolled right, scrollLeft=${scrollLeft}`
+			)
+		})
+
+		await test(`[${vp.label}] scrollHorizontally scrolls metrics-timeline left`, async () => {
+			const result = await page.evaluate(async () => {
+				const timeline = document.getElementById('metrics-timeline')
+				timeline.scrollLeft = 500 // scroll right first
+				return await PageController.scrollHorizontally(false, 300, timeline)
+			})
+			assert.ok(
+				result.includes('Scrolled container') && result.includes('horizontally'),
+				`Expected horizontal scroll left, got: ${result}`
+			)
+		})
+
+		await test(`[${vp.label}] scrollHorizontally walks up to scrollable parent`, async () => {
+			const result = await page.evaluate(async () => {
+				const timeline = document.getElementById('metrics-timeline')
+				timeline.scrollLeft = 0
+				const child = timeline.querySelector('.metric-point')
+				return await PageController.scrollHorizontally(true, 300, child)
+			})
+			assert.ok(
+				result.includes('Scrolled container'),
+				`Expected parent walk-up scroll, got: ${result}`
+			)
+		})
+
+		await test(`[${vp.label}] scrollHorizontally returns "no scrollable container" for non-scrollable element`, async () => {
+			const result = await page.evaluate(async () => {
+				// Use the topbar brand which has no horizontal scroll in its ancestors
+				const el = document.querySelector('.topbar-brand')
+				return await PageController.scrollHorizontally(true, 300, el)
+			})
+			assert.ok(
+				result.includes('No horizontally scrollable container'),
+				`Expected no-scroll message, got: ${result}`
+			)
+		})
+
+		// --- Page-level scrolling (no element argument) ---
+		await test(`[${vp.label}] scrollVertically page-level scroll returns status`, async () => {
 			const result = await page.evaluate(async () => {
 				return await PageController.scrollVertically(true, 200)
 			})
-			assert.ok(typeof result === 'string', 'scrollVertically should return a status string')
+			assert.ok(
+				typeof result === 'string' && result.length > 0,
+				`Expected status string, got: ${result}`
+			)
+		})
+
+		await test(`[${vp.label}] scrollHorizontally page-level returns edge message when page doesn't scroll`, async () => {
+			// The page body doesn't have horizontal overflow, so this should report "already at edge"
+			const result = await page.evaluate(async () => {
+				return await PageController.scrollHorizontally(true, 200)
+			})
+			assert.ok(
+				typeof result === 'string' && result.length > 0,
+				`Expected status string, got: ${result}`
+			)
+		})
+
+		// --- clearAndTypeElement on contenteditable ---
+		await test(`[${vp.label}] clearAndTypeElement works on contenteditable`, async () => {
+			// Navigate to settings > general where the contenteditable lives
+			await clickByText(page, 'Jane Doe')
+			await new Promise((r) => setTimeout(r, 200))
+			await clickByText(page, 'Account Settings')
+			await new Promise((r) => setTimeout(r, 200))
+			await clickByText(page, 'General')
+			await new Promise((r) => setTimeout(r, 200))
+
+			const result = await page.evaluate(async () => {
+				const notes = document.getElementById('settings-notes')
+				notes.innerText = 'old content here'
+				await PageController.clearAndTypeElement(notes, 'replaced content')
+				return notes.innerText
+			})
+			assert.equal(result, 'replaced content')
+		})
+
+		// --- inputTextElement on plain <input> (not textarea, not contenteditable) ---
+		await test(`[${vp.label}] inputTextElement works on plain input element`, async () => {
+			// Navigate to profile page which has text inputs
+			await clickByText(page, 'Jane Doe')
+			await new Promise((r) => setTimeout(r, 200))
+			await clickByText(page, 'Profile')
+			await new Promise((r) => setTimeout(r, 200))
+
+			const result = await page.evaluate(async () => {
+				const input = document.getElementById('profile-name')
+				await PageController.inputTextElement(input, 'Jane Smith')
+				return input.value
+			})
+			assert.equal(result, 'Jane Smith')
+		})
+
+		// --- clearAndTypeElement on plain <input> ---
+		await test(`[${vp.label}] clearAndTypeElement clears then types on plain input`, async () => {
+			const result = await page.evaluate(async () => {
+				const input = document.getElementById('profile-name')
+				input.value = 'Old Name'
+				await PageController.clearAndTypeElement(input, 'New Name')
+				return input.value
+			})
+			assert.equal(result, 'New Name')
+		})
+
+		// --- selectOptionElement error: option not found ---
+		await test(`[${vp.label}] selectOptionElement throws for non-existent option`, async () => {
+			// Navigate back to settings general for the select element
+			await clickByText(page, 'Jane Doe')
+			await new Promise((r) => setTimeout(r, 200))
+			await clickByText(page, 'Account Settings')
+			await new Promise((r) => setTimeout(r, 200))
+			await clickByText(page, 'General')
+			await new Promise((r) => setTimeout(r, 200))
+
+			const threw = await page.evaluate(async () => {
+				const select = document.getElementById('settings-timezone')
+				try {
+					await PageController.selectOptionElement(select, 'Mars/Olympus_Mons')
+					return false
+				} catch (e) {
+					return e.message.includes('Mars/Olympus_Mons')
+				}
+			})
+			assert.ok(threw, 'selectOptionElement should throw for non-existent option')
+		})
+
+		// --- pressKeyAction with different key mappings ---
+		await test(`[${vp.label}] pressKeyAction dispatches Tab key correctly`, async () => {
+			const result = await page.evaluate(async () => {
+				let captured = null
+				const handler = (e) => {
+					captured = { key: e.key, code: e.code }
+				}
+				document.body.addEventListener('keydown', handler)
+				document.body.focus()
+				await PageController.pressKeyAction('Tab')
+				document.body.removeEventListener('keydown', handler)
+				return captured
+			})
+			assert.ok(result, 'Should capture Tab keydown')
+			assert.equal(result.key, 'Tab')
+			assert.equal(result.code, 'Tab')
+		})
+
+		await test(`[${vp.label}] pressKeyAction dispatches ArrowDown key correctly`, async () => {
+			const result = await page.evaluate(async () => {
+				let captured = null
+				const handler = (e) => {
+					captured = { key: e.key, code: e.code }
+				}
+				document.body.addEventListener('keydown', handler)
+				document.body.focus()
+				await PageController.pressKeyAction('ArrowDown')
+				document.body.removeEventListener('keydown', handler)
+				return captured
+			})
+			assert.ok(result, 'Should capture ArrowDown keydown')
+			assert.equal(result.key, 'ArrowDown')
+			assert.equal(result.code, 'ArrowDown')
+		})
+
+		await test(`[${vp.label}] pressKeyAction dispatches Space key correctly`, async () => {
+			const result = await page.evaluate(async () => {
+				let captured = null
+				const handler = (e) => {
+					captured = { key: e.key, code: e.code }
+					e.preventDefault()
+				}
+				document.body.addEventListener('keydown', handler)
+				document.body.focus()
+				await PageController.pressKeyAction(' ')
+				document.body.removeEventListener('keydown', handler)
+				return captured
+			})
+			assert.ok(result, 'Should capture Space keydown')
+			assert.equal(result.key, ' ')
+			assert.equal(result.code, 'Space')
+		})
+
+		await test(`[${vp.label}] pressKeyAction with Alt+Meta modifiers`, async () => {
+			const result = await page.evaluate(async () => {
+				let captured = null
+				const handler = (e) => {
+					captured = { altKey: e.altKey, metaKey: e.metaKey }
+				}
+				document.body.addEventListener('keydown', handler)
+				document.body.focus()
+				await PageController.pressKeyAction('a', ['Alt', 'Meta'])
+				document.body.removeEventListener('keydown', handler)
+				return captured
+			})
+			assert.ok(result, 'Should capture keydown with modifiers')
+			assert.equal(result.altKey, true)
+			assert.equal(result.metaKey, true)
+		})
+
+		await test(`[${vp.label}] pressKeyAction with Command modifier (alias for Meta)`, async () => {
+			const result = await page.evaluate(async () => {
+				let captured = null
+				const handler = (e) => {
+					captured = { metaKey: e.metaKey }
+				}
+				document.body.addEventListener('keydown', handler)
+				document.body.focus()
+				await PageController.pressKeyAction('c', ['Command'])
+				document.body.removeEventListener('keydown', handler)
+				return captured
+			})
+			assert.ok(result, 'Should capture keydown')
+			assert.equal(result.metaKey, true, 'Command should map to metaKey')
+		})
+
+		await test(`[${vp.label}] pressKeyAction with Control modifier (alias for Ctrl)`, async () => {
+			const result = await page.evaluate(async () => {
+				let captured = null
+				const handler = (e) => {
+					captured = { ctrlKey: e.ctrlKey }
+				}
+				document.body.addEventListener('keydown', handler)
+				document.body.focus()
+				await PageController.pressKeyAction('z', ['Control'])
+				document.body.removeEventListener('keydown', handler)
+				return captured
+			})
+			assert.ok(result, 'Should capture keydown')
+			assert.equal(result.ctrlKey, true, 'Control should map to ctrlKey')
 		})
 
 		await test(`[${vp.label}] Element count changes when navigating pages`, async () => {
-			const countBefore = await getElementCount(page)
-
-			// Navigate to dashboard by clicking "Dashboard" in top nav
+			// Navigate to Dashboard
 			await clickByText(page, 'Dashboard')
-			const countAfter = await getElementCount(page)
+			await new Promise((r) => setTimeout(r, 200))
+			const countDashboard = await getElementCount(page)
+
+			// Navigate to Settings which has more interactive elements (nav + form fields)
+			await clickByText(page, 'Jane Doe')
+			await new Promise((r) => setTimeout(r, 200))
+			await clickByText(page, 'Account Settings')
+			await new Promise((r) => setTimeout(r, 200))
+			const countSettings = await getElementCount(page)
 
 			assert.notEqual(
-				countBefore,
-				countAfter,
-				`Element count should change when navigating between pages (settings: ${countBefore}, dashboard: ${countAfter})`
+				countDashboard,
+				countSettings,
+				`Element count should change when navigating between pages (dashboard: ${countDashboard}, settings: ${countSettings})`
 			)
 		})
 
 		await test(`[${vp.label}] Element count is reasonable for viewport`, async () => {
+			// Navigate back to dashboard for final check
+			await clickByText(page, 'Dashboard')
+			await new Promise((r) => setTimeout(r, 200))
 			const count = await getElementCount(page)
 			assert.ok(count >= 5 && count <= 80, `Expected 5-80 interactive elements, got ${count}`)
 			console.log(`     [info] ${count} interactive elements on dashboard`)

@@ -109,6 +109,14 @@
 		.data-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
 		.data-table th, .data-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #334155; font-size: 14px; }
 		.data-table th { color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+		/* ── Scrollable containers ── */
+		.log-viewer { max-height: 150px; overflow-y: auto; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; color: #94a3b8; line-height: 1.6; }
+		.metrics-timeline { overflow-x: auto; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; }
+		.metrics-timeline-inner { display: flex; gap: 16px; width: 1800px; }
+		.metric-point { flex-shrink: 0; width: 120px; text-align: center; padding: 8px; background: #1e293b; border-radius: 6px; font-size: 12px; }
+		.metric-point .metric-val { font-size: 18px; font-weight: 700; margin: 4px 0; }
+		.metric-point .metric-label { color: #64748b; }
 	</style>
 </head>
 <body>
@@ -194,6 +202,50 @@
 					<tr><td>Pipeline failed</td><td>data-pipeline</td><td>Jane D.</td><td>3 hours ago</td></tr>
 				</tbody>
 			</table>
+
+			<!-- Scrollable deploy log (vertical scroll container) -->
+			<h2 style="margin:24px 0 12px">Deploy Log</h2>
+			<div class="log-viewer" id="deploy-log" data-pa-id="80">
+				<div>[10:32:01] Starting deploy pipeline for frontend-v3...</div>
+				<div>[10:32:02] Building Docker image: acme/frontend:v3.12.1</div>
+				<div>[10:32:15] Image built successfully (2.3 GB)</div>
+				<div>[10:32:16] Pushing to container registry...</div>
+				<div>[10:32:28] Push complete. Digest: sha256:a1b2c3d4</div>
+				<div>[10:32:29] Updating Kubernetes deployment...</div>
+				<div>[10:32:30] Rolling update in progress: 0/3 pods ready</div>
+				<div>[10:32:35] Rolling update in progress: 1/3 pods ready</div>
+				<div>[10:32:40] Rolling update in progress: 2/3 pods ready</div>
+				<div>[10:32:45] Rolling update complete: 3/3 pods ready</div>
+				<div>[10:32:46] Running health checks...</div>
+				<div>[10:32:48] Health check passed: /api/health → 200 OK</div>
+				<div>[10:32:49] Health check passed: /api/ready → 200 OK</div>
+				<div>[10:32:50] CDN cache invalidated for 847 assets</div>
+				<div>[10:32:51] DNS propagation verified across 12 regions</div>
+				<div>[10:32:52] Synthetic monitoring started for 5 endpoints</div>
+				<div>[10:32:53] Deploy complete. Duration: 52s</div>
+				<div>[10:32:54] Notification sent to #deploys channel</div>
+				<div>[10:33:01] Post-deploy metrics: p99 latency 42ms (baseline: 45ms)</div>
+				<div>[10:33:10] Canary analysis: error rate 0.01% (threshold: 1%)</div>
+			</div>
+
+			<!-- Scrollable metrics timeline (horizontal scroll container) -->
+			<h2 style="margin:24px 0 12px">Hourly Metrics</h2>
+			<div class="metrics-timeline" id="metrics-timeline" data-pa-id="81">
+				<div class="metrics-timeline-inner">
+					<div class="metric-point"><div class="metric-label">00:00</div><div class="metric-val">12K</div><div class="metric-label">requests</div></div>
+					<div class="metric-point"><div class="metric-label">01:00</div><div class="metric-val">8K</div><div class="metric-label">requests</div></div>
+					<div class="metric-point"><div class="metric-label">02:00</div><div class="metric-val">5K</div><div class="metric-label">requests</div></div>
+					<div class="metric-point"><div class="metric-label">03:00</div><div class="metric-val">3K</div><div class="metric-label">requests</div></div>
+					<div class="metric-point"><div class="metric-label">04:00</div><div class="metric-val">4K</div><div class="metric-label">requests</div></div>
+					<div class="metric-point"><div class="metric-label">05:00</div><div class="metric-val">7K</div><div class="metric-label">requests</div></div>
+					<div class="metric-point"><div class="metric-label">06:00</div><div class="metric-val">15K</div><div class="metric-label">requests</div></div>
+					<div class="metric-point"><div class="metric-label">07:00</div><div class="metric-val">28K</div><div class="metric-label">requests</div></div>
+					<div class="metric-point"><div class="metric-label">08:00</div><div class="metric-val">45K</div><div class="metric-label">requests</div></div>
+					<div class="metric-point"><div class="metric-label">09:00</div><div class="metric-val">62K</div><div class="metric-label">requests</div></div>
+					<div class="metric-point"><div class="metric-label">10:00</div><div class="metric-val">71K</div><div class="metric-label">requests</div></div>
+					<div class="metric-point"><div class="metric-label">11:00</div><div class="metric-val">68K</div><div class="metric-label">requests</div></div>
+				</div>
+			</div>
 		</div>
 
 		<!-- ═══════ PROJECTS PAGE ═══════ -->
