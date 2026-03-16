@@ -1,88 +1,152 @@
+/* ======================================================
+   Agent Panel — compact, draggable, hotpoint-snapping HUD
+   ====================================================== */
+
 .wrapper {
 	position: fixed;
-	bottom: 100px;
-	left: 50%;
-	transform: translateX(-50%) translateY(20px);
-	opacity: 0;
-	z-index: 2147483642; /* 比 SimulatorMask 高一层 */
+	z-index: 2147483642;
 	box-sizing: border-box;
-
 	overflow: visible;
+	user-select: none;
+	opacity: 0;
+	transition:
+		opacity 0.25s ease,
+		transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
 	* {
 		box-sizing: border-box;
 	}
 
-	--width: 360px;
-	--height: 40px;
-	--border-radius: 12px;
-
-	--side-space: 12px; /* 控制栏两侧的间距 */
+	/* Layout vars */
+	--width: 320px;
+	--collapsed-height: 36px;
+	--border-radius: 14px;
+	--side-space: 10px;
 	--history-width: calc(var(--width) - var(--side-space) * 2);
 
-	--color-1: rgb(57, 182, 255);
-	--color-2: rgb(189, 69, 251);
-	--color-3: rgb(255, 87, 51);
-	--color-4: rgb(255, 214, 0);
+	/* Palette */
+	--agent-primary: #6366f1;
+	--agent-secondary: #a855f7;
+	--agent-glow: rgba(99, 102, 241, 0.25);
+	--color-success: rgb(34, 197, 94);
+	--color-error: rgb(239, 68, 68);
+	--color-warning: rgb(255, 214, 0);
+	--color-observation: rgb(147, 51, 234);
+	--color-question: rgb(255, 159, 67);
 
 	width: var(--width);
-	height: var(--height);
+	height: var(--collapsed-height);
 
-	transition: all 0.3s ease-in-out;
-
-	/* 响应式设计 */
 	@media (max-width: 480px) {
-		width: calc(100vw - 40px);
-		--width: calc(100vw - 40px);
+		width: calc(100vw - 24px);
+		--width: calc(100vw - 24px);
 	}
+}
 
-	.background {
+/* ---- Hotpoint positions ---- */
+
+.wrapper.pos-bottom-center {
+	bottom: 16px;
+	left: 50%;
+	transform: translateX(-50%);
+}
+.wrapper.pos-bottom-center.hiding {
+	transform: translateX(-50%) translateY(20px);
+}
+
+.wrapper.pos-bottom-right {
+	bottom: 16px;
+	right: 16px;
+	left: auto;
+	transform: none;
+}
+.wrapper.pos-bottom-right.hiding {
+	transform: translateY(20px);
+}
+
+.wrapper.pos-bottom-left {
+	bottom: 16px;
+	left: 16px;
+	right: auto;
+	transform: none;
+}
+.wrapper.pos-bottom-left.hiding {
+	transform: translateY(20px);
+}
+
+.wrapper.pos-top-right {
+	top: 16px;
+	right: 16px;
+	bottom: auto;
+	left: auto;
+	transform: none;
+}
+.wrapper.pos-top-right.hiding {
+	transform: translateY(-20px);
+}
+
+.wrapper.pos-top-left {
+	top: 16px;
+	left: 16px;
+	bottom: auto;
+	right: auto;
+	transform: none;
+}
+.wrapper.pos-top-left.hiding {
+	transform: translateY(-20px);
+}
+
+/* ---- Dragging state ---- */
+.wrapper.dragging {
+	opacity: 0.85 !important;
+	transition: none !important;
+	cursor: grabbing;
+}
+
+/* ---- Background glow ---- */
+
+.background {
+	position: absolute;
+	inset: -2px -6px;
+	border-radius: calc(var(--border-radius) + 4px);
+	filter: blur(14px);
+	overflow: hidden;
+	opacity: 0.7;
+
+	&::before {
+		content: '';
+		z-index: -1;
+		pointer-events: none;
 		position: absolute;
-		inset: -2px -8px;
-		border-radius: calc(var(--border-radius) + 4px);
-		filter: blur(16px);
-		overflow: hidden;
-		/* mix-blend-mode: lighten; */
-		/* display: none; */
-
-		&::before {
-			content: '';
-			z-index: -1;
-			pointer-events: none;
-			position: absolute;
-			width: 100%;
-			height: 100%;
-			/* left: -100%; */
-			left: 0;
-			top: 0;
-
-			background-image: linear-gradient(
-				to bottom left,
-				var(--color-1),
-				var(--color-2),
-				var(--color-1)
-			);
-			animation: mask-running 2s linear infinite;
-		}
-		&::after {
-			content: '';
-			z-index: -1;
-			pointer-events: none;
-			position: absolute;
-			width: 100%;
-			height: 100%;
-			left: 0;
-			top: 0;
-
-			background-image: linear-gradient(
-				to bottom left,
-				var(--color-2),
-				var(--color-1),
-				var(--color-2)
-			);
-			animation: mask-running 2s linear infinite;
-			animation-delay: 1s;
-		}
+		width: 100%;
+		height: 100%;
+		left: 0;
+		top: 0;
+		background-image: linear-gradient(
+			to bottom left,
+			var(--agent-primary),
+			var(--agent-secondary),
+			var(--agent-primary)
+		);
+		animation: mask-running 2.5s linear infinite;
+	}
+	&::after {
+		content: '';
+		z-index: -1;
+		pointer-events: none;
+		position: absolute;
+		width: 100%;
+		height: 100%;
+		left: 0;
+		top: 0;
+		background-image: linear-gradient(
+			to bottom left,
+			var(--agent-secondary),
+			var(--agent-primary),
+			var(--agent-secondary)
+		);
+		animation: mask-running 2.5s linear infinite;
+		animation-delay: 1.25s;
 	}
 }
 
@@ -95,92 +159,88 @@
 	}
 }
 
-/* 控制栏 */
+/* ---- Header / control bar ---- */
+
 .header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 8px 12px;
+	padding: 6px 10px;
 	user-select: none;
-
 	position: absolute;
 	inset: 0;
+	cursor: grab;
+	flex-shrink: 0;
 
-	cursor: pointer;
-	flex-shrink: 0; /* 防止 header 被压缩 */
-
-	background: rgba(0, 0, 0, 0.5);
-	backdrop-filter: blur(10px);
+	background: rgba(15, 15, 25, 0.65);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
 	border-radius: var(--border-radius);
 	background-clip: padding-box;
 
 	box-shadow:
-		0 0 0px 2px rgba(255, 255, 255, 0.4),
-		0 0 5px 1px rgba(255, 255, 255, 0.3);
+		0 0 0px 1.5px rgba(255, 255, 255, 0.15),
+		0 2px 8px rgba(0, 0, 0, 0.3);
 
 	.statusSection {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 7px;
 		flex: 1;
-		min-height: 24px; /* 确保垂直居中 */
+		min-height: 22px;
+		overflow: hidden;
 
 		.indicator {
 			width: 6px;
 			height: 6px;
 			border-radius: 50%;
-			background: rgba(255, 255, 255, 0.5);
+			background: rgba(255, 255, 255, 0.4);
 			flex-shrink: 0;
-			animation: none; /* 默认无动画 */
+			animation: none;
 
-			/* 运行状态 - 有动画 */
 			&.thinking {
-				background: rgb(57, 182, 255);
+				background: var(--agent-primary);
 				animation: pulse 0.8s ease-in-out infinite;
 			}
-
-			&.tool_executing {
-				background: rgb(189, 69, 251);
-				animation: pulse 0.6s ease-in-out infinite;
+			&.executing {
+				background: var(--agent-secondary);
+				animation: pulse 0.5s ease-in-out infinite;
 			}
-
-			&.retry {
-				background: rgb(255, 214, 0);
+			&.retrying {
+				background: var(--color-warning);
 				animation: retryPulse 1s ease-in-out infinite;
 			}
-
-			/* 静止状态 - 无动画 */
 			&.completed,
 			&.input,
 			&.output {
-				background: rgb(34, 197, 94);
+				background: var(--color-success);
 				animation: none;
 			}
-
 			&.error {
-				background: rgb(239, 68, 68);
+				background: var(--color-error);
 				animation: none;
 			}
 		}
 
 		.statusText {
-			color: white;
-			font-size: 12px;
+			color: rgba(255, 255, 255, 0.92);
+			font-size: 11px;
 			line-height: 1;
 			font-weight: 500;
-			transition: all 0.3s ease-in-out;
-			position: relative;
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+			transition: all 0.2s ease;
 			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
 			display: flex;
 			align-items: center;
-			min-height: 24px; /* 确保垂直居中 */
+			min-height: 22px;
 
 			&.fadeOut {
-				animation: statusTextFadeOut 0.3s ease forwards;
+				animation: statusTextFadeOut 0.2s ease forwards;
 			}
-
 			&.fadeIn {
-				animation: statusTextFadeIn 0.3s ease forwards;
+				animation: statusTextFadeIn 0.2s ease forwards;
 			}
 		}
 	}
@@ -188,31 +248,35 @@
 	.controls {
 		display: flex;
 		align-items: center;
-		gap: 4px;
+		gap: 3px;
+		flex-shrink: 0;
+		margin-left: 6px;
 
 		.controlButton {
-			width: 24px;
-			height: 24px;
+			width: 22px;
+			height: 22px;
 			border: none;
-			border-radius: 4px;
-			background: rgba(255, 255, 255, 0.1);
-			color: white;
+			border-radius: 6px;
+			background: rgba(255, 255, 255, 0.08);
+			color: rgba(255, 255, 255, 0.75);
 			cursor: pointer;
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			font-size: 12px;
+			font-size: 10px;
 			line-height: 1;
+			transition: background 0.15s ease;
 
 			&:hover {
-				background: rgba(255, 255, 255, 0.2);
+				background: rgba(255, 255, 255, 0.18);
+				color: white;
 			}
 		}
 
 		.stopButton {
-			background: rgba(239, 68, 68, 0.2);
-			color: rgb(255, 41, 41);
-			font-weight: 600;
+			background: rgba(239, 68, 68, 0.15);
+			color: rgb(255, 100, 100);
+			font-weight: 700;
 
 			&:hover {
 				background: rgba(239, 68, 68, 0.3);
@@ -221,10 +285,12 @@
 	}
 }
 
+/* ---- Animations ---- */
+
 @keyframes statusTextFadeIn {
 	0% {
 		opacity: 0;
-		transform: translateY(5px);
+		transform: translateY(4px);
 	}
 	100% {
 		opacity: 1;
@@ -239,245 +305,10 @@
 	}
 	100% {
 		opacity: 0;
-		transform: translateY(-5px);
+		transform: translateY(-4px);
 	}
 }
 
-.historySectionWrapper {
-	position: absolute;
-	width: var(--history-width);
-	bottom: var(--height);
-	left: var(--side-space);
-	z-index: -2;
-
-	padding-top: 0px;
-	visibility: collapse;
-	overflow: hidden;
-
-	transition: all 0.2s;
-
-	background: rgba(2, 0, 20, 0.5);
-	/* background: rgba(186, 186, 186, 0.2); */
-	backdrop-filter: blur(10px);
-
-	text-shadow: 0 0 1px rgba(0, 0, 0, 0.2);
-
-	border-top-left-radius: calc(var(--border-radius) + 4px);
-	border-top-right-radius: calc(var(--border-radius) + 4px);
-
-	/* border: 2px solid rgba(255, 255, 255, 0.8); */
-	border: 2px solid rgba(255, 255, 255, 0.4);
-	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
-
-	/* @media (prefers-color-scheme: dark) {
-		box-shadow:
-			0 8px 32px 0 rgba(0, 0, 0, 0.85),
-			0 2px 12px 0 rgba(57, 182, 255, 0.1);
-	} */
-
-	.expanded & {
-		padding-top: 8px;
-		visibility: visible;
-	}
-
-	.historySection {
-		position: relative;
-		overflow-y: auto;
-		overscroll-behavior: contain;
-		scrollbar-width: none;
-		max-height: 0;
-		padding-inline: 8px;
-
-		transition: max-height 0.2s;
-
-		.expanded & {
-			max-height: 400px;
-		}
-
-		.historyItem {
-			/* backdrop-filter: blur(10px); */
-			padding: 8px 10px;
-			margin-bottom: 6px;
-			background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
-			border-radius: 8px;
-			border-left: 2px solid rgba(57, 182, 255, 0.5);
-			font-size: 12px;
-			color: white;
-			/* color: black; */
-			line-height: 1.3;
-			position: relative;
-			overflow: hidden;
-
-			/* 微妙的内阴影 */
-			box-shadow:
-				inset 0 1px 0 rgba(255, 255, 255, 0.1),
-				0 1px 3px rgba(0, 0, 0, 0.1);
-
-			&::before {
-				content: '';
-				position: absolute;
-				top: 0;
-				left: 0;
-				right: 0;
-				height: 1px;
-				background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-			}
-
-			&:hover {
-				background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
-				/* transform: translateY(-1px); */
-				box-shadow:
-					inset 0 1px 0 rgba(255, 255, 255, 0.15),
-					0 2px 4px rgba(0, 0, 0, 0.15);
-			}
-
-			&:last-child {
-				margin-bottom: 10px;
-			}
-
-			&.completed,
-			&.input,
-			&.output {
-				border-left-color: rgb(34, 197, 94);
-				background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05));
-			}
-
-			&.error {
-				border-left-color: rgb(239, 68, 68);
-				background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
-			}
-
-			&.retry {
-				border-left-color: rgb(255, 214, 0);
-				background: linear-gradient(135deg, rgba(255, 214, 0, 0.1), rgba(255, 214, 0, 0.05));
-			}
-
-			&.observation {
-				border-left-color: rgb(147, 51, 234);
-				background: linear-gradient(135deg, rgba(147, 51, 234, 0.1), rgba(147, 51, 234, 0.05));
-			}
-
-			&.question {
-				border-left-color: rgb(255, 159, 67);
-				background: linear-gradient(135deg, rgba(255, 159, 67, 0.15), rgba(255, 159, 67, 0.08));
-			}
-
-			/* 突出显示 done 成功结果 */
-			&.doneSuccess {
-				background: linear-gradient(
-					135deg,
-					rgba(34, 197, 94, 0.25),
-					rgba(34, 197, 94, 0.15),
-					rgba(34, 197, 94, 0.08)
-				);
-				border: none;
-				border-left: 4px solid rgb(34, 197, 94);
-				box-shadow:
-					0 4px 12px rgba(34, 197, 94, 0.3),
-					inset 0 1px 0 rgba(255, 255, 255, 0.2),
-					0 0 20px rgba(34, 197, 94, 0.1);
-				font-weight: 600;
-				color: rgb(220, 252, 231);
-				padding: 10px 12px;
-				margin-bottom: 8px;
-				border-radius: 8px;
-				position: relative;
-				overflow: hidden;
-
-				&::before {
-					background: linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.4), transparent);
-				}
-
-				&::after {
-					content: '';
-					position: absolute;
-					top: 0;
-					left: -100%;
-					width: 100%;
-					height: 100%;
-					background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-					animation: shimmer 2s ease-in-out infinite;
-				}
-
-				.historyContent {
-					.statusIcon {
-						font-size: 16px;
-						animation: celebrate 0.8s ease-in-out;
-						filter: drop-shadow(0 2px 4px rgba(34, 197, 94, 0.5));
-					}
-				}
-			}
-
-			/* 突出显示 done 失败结果 */
-			&.doneError {
-				background: linear-gradient(
-					135deg,
-					rgba(239, 68, 68, 0.25),
-					rgba(239, 68, 68, 0.15),
-					rgba(239, 68, 68, 0.08)
-				);
-				border: none;
-				border-left: 4px solid rgb(239, 68, 68);
-				box-shadow:
-					0 4px 12px rgba(239, 68, 68, 0.3),
-					inset 0 1px 0 rgba(255, 255, 255, 0.2),
-					0 0 20px rgba(239, 68, 68, 0.1);
-				font-weight: 600;
-				color: rgb(254, 226, 226);
-				padding: 10px 12px;
-				margin-bottom: 8px;
-				border-radius: 8px;
-				position: relative;
-				overflow: hidden;
-
-				&::before {
-					background: linear-gradient(90deg, transparent, rgba(239, 68, 68, 0.4), transparent);
-				}
-
-				.historyContent {
-					.statusIcon {
-						font-size: 16px;
-						filter: drop-shadow(0 2px 4px rgba(239, 68, 68, 0.5));
-					}
-				}
-			}
-
-			.historyContent {
-				display: flex;
-				align-items: flex-start;
-				gap: 8px;
-
-				word-break: break-all;
-				white-space: pre-wrap;
-
-				/* overflow-x: auto; */
-
-				.statusIcon {
-					font-size: 12px;
-					flex-shrink: 0;
-					line-height: 1;
-					transition: all 0.3s ease;
-				}
-
-				.reflectionLines {
-					display: flex;
-					flex-direction: column;
-					gap: 4px;
-				}
-			}
-
-			.historyMeta {
-				font-size: 10px;
-				color: rgba(255, 255, 255, 0.6);
-				/* color: rgb(61, 61, 61); */
-				margin-top: 8px;
-				line-height: 1;
-			}
-		}
-	}
-}
-
-/* 动画关键帧 - 更快的闪烁 */
 @keyframes pulse {
 	0%,
 	100% {
@@ -485,12 +316,11 @@
 		transform: scale(1);
 	}
 	50% {
-		opacity: 0.4;
-		transform: scale(1.3);
+		opacity: 0.3;
+		transform: scale(1.4);
 	}
 }
 
-/* 重试动画 - 旋转脉冲 */
 @keyframes retryPulse {
 	0%,
 	100% {
@@ -498,34 +328,32 @@
 		transform: scale(1) rotate(0deg);
 	}
 	25% {
-		opacity: 0.6;
-		transform: scale(1.2) rotate(90deg);
+		opacity: 0.5;
+		transform: scale(1.3) rotate(90deg);
 	}
 	50% {
-		opacity: 0.8;
+		opacity: 0.7;
 		transform: scale(1.1) rotate(180deg);
 	}
 	75% {
-		opacity: 0.6;
-		transform: scale(1.2) rotate(270deg);
+		opacity: 0.5;
+		transform: scale(1.3) rotate(270deg);
 	}
 }
 
-/* 庆祝动画 */
 @keyframes celebrate {
 	0%,
 	100% {
 		transform: scale(1);
 	}
 	25% {
-		transform: scale(1.2) rotate(-5deg);
+		transform: scale(1.15) rotate(-4deg);
 	}
 	75% {
-		transform: scale(1.2) rotate(5deg);
+		transform: scale(1.15) rotate(4deg);
 	}
 }
 
-/* done 卡片的光泽效果 */
 @keyframes shimmer {
 	0% {
 		left: -100%;
@@ -535,67 +363,289 @@
 	}
 }
 
-/* 输入区域样式 */
+/* ---- History section (expands above/below header) ---- */
+
+.historySectionWrapper {
+	position: absolute;
+	width: var(--history-width);
+	left: var(--side-space);
+	z-index: -2;
+
+	padding-top: 0;
+	visibility: collapse;
+	overflow: hidden;
+	transition: all 0.2s ease;
+
+	background: rgba(10, 10, 25, 0.7);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	text-shadow: 0 0 1px rgba(0, 0, 0, 0.2);
+
+	border: 1.5px solid rgba(255, 255, 255, 0.18);
+	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Position history relative to hotpoint */
+.wrapper.pos-bottom-center .historySectionWrapper,
+.wrapper.pos-bottom-right .historySectionWrapper,
+.wrapper.pos-bottom-left .historySectionWrapper {
+	bottom: var(--collapsed-height);
+	border-top-left-radius: calc(var(--border-radius) + 2px);
+	border-top-right-radius: calc(var(--border-radius) + 2px);
+}
+
+.wrapper.pos-top-right .historySectionWrapper,
+.wrapper.pos-top-left .historySectionWrapper {
+	top: var(--collapsed-height);
+	border-bottom-left-radius: calc(var(--border-radius) + 2px);
+	border-bottom-right-radius: calc(var(--border-radius) + 2px);
+}
+
+.expanded .historySectionWrapper {
+	padding-top: 6px;
+	visibility: visible;
+}
+
+.historySectionWrapper .historySection {
+	position: relative;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scrollbar-width: none;
+	max-height: 0;
+	padding-inline: 6px;
+	transition: max-height 0.2s ease;
+
+	.expanded & {
+		max-height: 350px;
+	}
+}
+
+/* ---- History items ---- */
+
+.historyItem {
+	padding: 6px 8px;
+	margin-bottom: 4px;
+	background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+	border-radius: 8px;
+	border-left: 2px solid rgba(99, 102, 241, 0.4);
+	font-size: 11px;
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+	color: rgba(255, 255, 255, 0.9);
+	line-height: 1.35;
+	position: relative;
+	overflow: hidden;
+
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.06),
+		0 1px 2px rgba(0, 0, 0, 0.1);
+
+	&::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 1px;
+		background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+	}
+
+	&:last-child {
+		margin-bottom: 8px;
+	}
+
+	&.completed,
+	&.input,
+	&.output {
+		border-left-color: var(--color-success);
+		background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.03));
+	}
+	&.error {
+		border-left-color: var(--color-error);
+		background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.03));
+	}
+	&.retry {
+		border-left-color: var(--color-warning);
+		background: linear-gradient(135deg, rgba(255, 214, 0, 0.08), rgba(255, 214, 0, 0.03));
+	}
+	&.observation {
+		border-left-color: var(--color-observation);
+		background: linear-gradient(135deg, rgba(147, 51, 234, 0.08), rgba(147, 51, 234, 0.03));
+	}
+	&.question {
+		border-left-color: var(--color-question);
+		background: linear-gradient(135deg, rgba(255, 159, 67, 0.1), rgba(255, 159, 67, 0.05));
+	}
+
+	/* Done success highlight */
+	&.doneSuccess {
+		background: linear-gradient(
+			135deg,
+			rgba(34, 197, 94, 0.2),
+			rgba(34, 197, 94, 0.1),
+			rgba(34, 197, 94, 0.05)
+		);
+		border: none;
+		border-left: 3px solid var(--color-success);
+		box-shadow:
+			0 2px 10px rgba(34, 197, 94, 0.25),
+			inset 0 1px 0 rgba(255, 255, 255, 0.15);
+		font-weight: 600;
+		color: rgb(220, 252, 231);
+		padding: 8px 10px;
+		margin-bottom: 6px;
+		border-radius: 8px;
+		position: relative;
+		overflow: hidden;
+
+		&::before {
+			background: linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.3), transparent);
+		}
+		&::after {
+			content: '';
+			position: absolute;
+			top: 0;
+			left: -100%;
+			width: 100%;
+			height: 100%;
+			background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+			animation: shimmer 2.5s ease-in-out infinite;
+		}
+
+		.historyContent .statusIcon {
+			font-size: 14px;
+			animation: celebrate 0.8s ease-in-out;
+			filter: drop-shadow(0 2px 4px rgba(34, 197, 94, 0.4));
+		}
+	}
+
+	/* Done error highlight */
+	&.doneError {
+		background: linear-gradient(
+			135deg,
+			rgba(239, 68, 68, 0.2),
+			rgba(239, 68, 68, 0.1),
+			rgba(239, 68, 68, 0.05)
+		);
+		border: none;
+		border-left: 3px solid var(--color-error);
+		box-shadow:
+			0 2px 10px rgba(239, 68, 68, 0.25),
+			inset 0 1px 0 rgba(255, 255, 255, 0.15);
+		font-weight: 600;
+		color: rgb(254, 226, 226);
+		padding: 8px 10px;
+		margin-bottom: 6px;
+		border-radius: 8px;
+		position: relative;
+		overflow: hidden;
+
+		&::before {
+			background: linear-gradient(90deg, transparent, rgba(239, 68, 68, 0.3), transparent);
+		}
+
+		.historyContent .statusIcon {
+			font-size: 14px;
+			filter: drop-shadow(0 2px 4px rgba(239, 68, 68, 0.4));
+		}
+	}
+
+	.historyContent {
+		display: flex;
+		align-items: flex-start;
+		gap: 6px;
+		word-break: break-all;
+		white-space: pre-wrap;
+
+		.statusIcon {
+			font-size: 11px;
+			flex-shrink: 0;
+			line-height: 1;
+			transition: all 0.2s ease;
+		}
+
+		.reflectionLines {
+			display: flex;
+			flex-direction: column;
+			gap: 3px;
+		}
+	}
+
+	.historyMeta {
+		font-size: 9px;
+		color: rgba(255, 255, 255, 0.45);
+		margin-top: 5px;
+		line-height: 1;
+	}
+}
+
+/* ---- Input section ---- */
+
 .inputSectionWrapper {
 	position: absolute;
 	width: var(--history-width);
-	top: var(--height);
 	left: var(--side-space);
 	z-index: -1;
-
 	visibility: visible;
 	overflow: hidden;
+	height: 44px;
+	transition: all 0.2s ease;
 
-	height: 48px;
-
-	transition: all 0.2s;
-
-	background: rgba(186, 186, 186, 0.2);
-	backdrop-filter: blur(10px);
-
-	border-bottom-left-radius: calc(var(--border-radius) + 4px);
-	border-bottom-right-radius: calc(var(--border-radius) + 4px);
-
-	border: 2px solid rgba(255, 255, 255, 0.3);
-	box-shadow: 0 1px 16px rgba(0, 0, 0, 0.4);
+	background: rgba(15, 15, 25, 0.55);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	border: 1.5px solid rgba(255, 255, 255, 0.15);
+	box-shadow: 0 1px 12px rgba(0, 0, 0, 0.3);
 
 	&.hidden {
 		visibility: collapse;
 		height: 0;
 	}
+}
 
-	.inputSection {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		padding: 8px 8px;
+/* Position input relative to hotpoint */
+.wrapper.pos-bottom-center .inputSectionWrapper,
+.wrapper.pos-bottom-right .inputSectionWrapper,
+.wrapper.pos-bottom-left .inputSectionWrapper {
+	top: var(--collapsed-height);
+	border-bottom-left-radius: calc(var(--border-radius) + 2px);
+	border-bottom-right-radius: calc(var(--border-radius) + 2px);
+}
 
-		.taskInput {
-			flex: 1;
-			background: rgba(255, 255, 255, 0.4);
-			border: 1px solid rgba(255, 255, 255, 0.3);
-			border-radius: 10px;
-			padding-inline: 10px;
-			color: rgb(20, 20, 20);
-			font-size: 12px;
-			height: 28px;
-			line-height: 1;
-			outline: none;
-			transition: all 0.2s ease;
+.wrapper.pos-top-right .inputSectionWrapper,
+.wrapper.pos-top-left .inputSectionWrapper {
+	bottom: var(--collapsed-height);
+	border-top-left-radius: calc(var(--border-radius) + 2px);
+	border-top-right-radius: calc(var(--border-radius) + 2px);
+}
 
-			/* text-shadow: 0 0 2px rgba(255, 255, 255, 0.8); */
+.inputSection {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 8px;
 
-			/* border-color: rgba(57, 182, 255, 0.3); */
+	.taskInput {
+		flex: 1;
+		background: rgba(255, 255, 255, 0.12);
+		border: 1px solid rgba(255, 255, 255, 0.15);
+		border-radius: 8px;
+		padding-inline: 10px;
+		color: rgba(255, 255, 255, 0.92);
+		font-size: 11px;
+		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+		height: 28px;
+		line-height: 1;
+		outline: none;
+		transition: all 0.15s ease;
 
-			&::placeholder {
-				color: rgb(53, 53, 53);
-			}
+		&::placeholder {
+			color: rgba(255, 255, 255, 0.35);
+		}
 
-			&:focus {
-				background: rgba(255, 255, 255, 0.8);
-				border-color: rgba(57, 182, 255, 0.6);
-				box-shadow: 0 0 0 2px rgba(57, 182, 255, 0.2);
-			}
+		&:focus {
+			background: rgba(255, 255, 255, 0.18);
+			border-color: rgba(99, 102, 241, 0.5);
+			box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 		}
 	}
 }

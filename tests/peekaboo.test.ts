@@ -10,8 +10,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ChameleonEngine, detectFingerprintingActivity } from '../packages/core/src/chameleon'
-import { PeekabooController } from '../packages/core/src/peekaboo'
+import { ChameleonEngine, detectFingerprintingActivity } from '../packages/core-ext/src/chameleon'
+import { PeekabooController } from '../packages/core-ext/src/peekaboo'
 
 describe('PeekabooController', () => {
 	let peekaboo: PeekabooController

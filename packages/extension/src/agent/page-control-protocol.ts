@@ -67,6 +67,68 @@ export interface PageControlMessage<K extends PageControlAction = PageControlAct
 	payload?: PageControlRemoteMethods[K]['args']
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null
+}
+
+function isNumberArrayPayload(payload: unknown, length: number): boolean {
+	return (
+		Array.isArray(payload) &&
+		payload.length === length &&
+		payload.every((item) => typeof item === 'number')
+	)
+}
+
+const PAGE_CONTROL_PAYLOAD_VALIDATORS: Record<PageControlAction, (payload: unknown) => boolean> = {
+	get_last_update_time: (payload) => payload === undefined,
+	get_browser_state: (payload) => payload === undefined,
+	update_tree: (payload) => payload === undefined,
+	clean_up_highlights: (payload) => payload === undefined,
+	click_element: (payload) => isNumberArrayPayload(payload, 1),
+	input_text: (payload) =>
+		Array.isArray(payload) &&
+		payload.length === 2 &&
+		typeof payload[0] === 'number' &&
+		typeof payload[1] === 'string',
+	select_option: (payload) =>
+		Array.isArray(payload) &&
+		payload.length === 2 &&
+		typeof payload[0] === 'number' &&
+		typeof payload[1] === 'string',
+	scroll: (payload) =>
+		Array.isArray(payload) &&
+		payload.length === 1 &&
+		isRecord(payload[0]) &&
+		typeof payload[0].down === 'boolean' &&
+		typeof payload[0].numPages === 'number',
+	scroll_horizontally: (payload) =>
+		Array.isArray(payload) &&
+		payload.length === 1 &&
+		isRecord(payload[0]) &&
+		typeof payload[0].right === 'boolean' &&
+		typeof payload[0].pixels === 'number',
+	execute_javascript: (payload) =>
+		Array.isArray(payload) && payload.length === 1 && typeof payload[0] === 'string',
+}
+
+export function isPageControlAction(value: string): value is PageControlAction {
+	return value in PAGE_CONTROL_PAYLOAD_VALIDATORS
+}
+
+export function isPageControlMessage(value: unknown): value is PageControlMessage {
+	if (!isRecord(value)) return false
+	if (value.type !== 'PAGE_CONTROL') return false
+	if (typeof value.action !== 'string' || !isPageControlAction(value.action)) return false
+	if (typeof value.targetTabId !== 'number') return false
+	return true
+}
+
+export function validatePageControlPayload(action: PageControlAction, payload: unknown): void {
+	if (!PAGE_CONTROL_PAYLOAD_VALIDATORS[action](payload)) {
+		throw new Error(`Invalid payload for PAGE_CONTROL action "${action}"`)
+	}
+}
+
 /**
  * Send a typed PAGE_CONTROL message over chrome.runtime.
  *
@@ -79,12 +141,15 @@ export function sendPageControlMessage<K extends PageControlAction>(
 	targetTabId: number,
 	...args: PageControlRemoteMethods[K]['args']
 ): Promise<PageControlRemoteMethods[K]['return']> {
+	const payload = args.length > 0 ? args : undefined
+	validatePageControlPayload(action, payload)
+
 	return chrome.runtime
 		.sendMessage({
 			type: 'PAGE_CONTROL',
 			action,
 			targetTabId,
-			payload: args.length > 0 ? args : undefined,
+			payload,
 		} satisfies PageControlMessage<K>)
 		.catch((error) => {
 			const msg =

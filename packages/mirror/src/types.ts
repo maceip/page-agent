@@ -20,6 +20,19 @@ export type MirrorSessionStatus =
 /** Per-layer sync status */
 export type LayerSyncStatus = 'idle' | 'syncing' | 'synced' | 'stale' | 'error'
 
+/**
+ * Request context for a mirrored session.
+ * Keeps user/session/page identity explicit across all layers.
+ */
+export interface MirrorSessionContext {
+	/** Stable user session identifier from the host application */
+	userSessionId: string
+	/** Stable page or tab identifier within the user session */
+	pageId: string
+	/** Page origin used for scope and policy decisions */
+	origin: string
+}
+
 /** Aggregate view of all three layers */
 export interface MirrorState {
 	sessionId: MirrorSessionId
@@ -27,6 +40,8 @@ export interface MirrorState {
 	cold: LayerSyncStatus
 	warm: LayerSyncStatus
 	hot: LayerSyncStatus
+	/** Immutable identity context bound to this session */
+	context: MirrorSessionContext | null
 	/** ISO-8601 timestamp of the last successful full sync */
 	lastFullSync: string | null
 	/** Remote cloud-agent id powering this session */
@@ -223,8 +238,17 @@ export interface MirrorConfig {
 	/** Git ref to use as the base for shadow environments */
 	ref?: string
 
+	/**
+	 * Remote browser CDP endpoint used by warm/hot layers.
+	 * Example: "ws://127.0.0.1:9222/devtools/browser/<id>".
+	 */
+	remoteCdpUrl?: string
+
 	/** QUIC transport configuration for the local ↔ cloud tunnel */
 	quic: QuicTransportConfig
+
+	/** Optional identity context associated with the mirrored session */
+	context?: MirrorSessionContext
 
 	/** Cold-layer configuration */
 	cold?: ColdLayerConfig

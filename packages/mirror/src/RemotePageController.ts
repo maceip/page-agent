@@ -15,9 +15,20 @@
  *   const core = new PageAgentCore({ pageController: remote, ... })
  *   // PageAgentCore now drives the remote browser through the mirror
  */
-import type { ActionResult, BrowserState, IPageController, StateSummary } from '@page-agent/page-controller'
+import type {
+	ActionResult,
+	BrowserState,
+	IPageController,
+	StateSummary,
+} from '@page-agent/page-controller'
 
-import type { IHotLayer, RemoteFocusEvent, RemoteKeyboardEvent, RemoteSelectEvent, RemoteTypeEvent } from './layers/hot'
+import type {
+	IHotLayer,
+	RemoteFocusEvent,
+	RemoteKeyboardEvent,
+	RemoteSelectEvent,
+	RemoteTypeEvent,
+} from './layers/hot'
 import type { MicroDOMSnapshot, SpatialElement } from './types'
 
 // ---------------------------------------------------------------------------
@@ -145,7 +156,7 @@ export class RemotePageController extends EventTarget implements IPageController
 		// Always check the hot layer — it may have received a push since our
 		// last applySnapshot() call.
 		const latestSnap = this.hotLayer.getLatestSnapshot()
-		if (latestSnap && latestSnap.seq !== this.snapshot?.seq) {
+		if (latestSnap && (!this.snapshot || latestSnap.seq > this.snapshot.seq)) {
 			this.applySnapshot(latestSnap)
 		}
 

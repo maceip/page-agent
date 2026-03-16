@@ -1,4 +1,9 @@
-import type { ActionResult, BrowserState, IPageController, StateSummary } from '@page-agent/page-controller'
+import type {
+	ActionResult,
+	BrowserState,
+	IPageController,
+	StateSummary,
+} from '@page-agent/page-controller'
 
 import type { TabsController } from './TabsController'
 import { sendPageControlMessage } from './page-control-protocol'
@@ -90,8 +95,10 @@ export class RemotePageController implements IPageController {
 
 	async clickElement(index: number): Promise<ActionResult> {
 		const res = await this.callAction('click_element', index)
-		// may cause page navigation, wait for loading to start
-		await new Promise((resolve) => setTimeout(resolve, 1000))
+		const tabId = this.currentTabId
+		if (tabId) {
+			await this.tabsController.waitForPotentialNavigation(tabId)
+		}
 		return res
 	}
 

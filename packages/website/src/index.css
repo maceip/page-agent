@@ -4,64 +4,54 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* 启用 class-based dark mode for Tailwind v4 */
 @variant dark (.dark &);
 
 :root {
-	--background: oklch(1 0 0);
-	--foreground: oklch(0.145 0 0);
-	/* 主题色渐变 */
-	--theme-color-1: rgb(88, 192, 252);
-	--theme-color-2: rgb(189, 69, 251);
+	--background: #fafaf9;
+	--foreground: #1c1917;
+	/* Warm monochrome theme */
+	--theme-color-1: #737373;
+	--theme-color-2: #a3a3a3;
 
 	/* shadcn */
 	--radius: 0.625rem;
-	--card: oklch(1 0 0);
-	--card-foreground: oklch(0.145 0 0);
-	--popover: oklch(1 0 0);
-	--popover-foreground: oklch(0.145 0 0);
-	--primary: oklch(0.205 0 0);
-	--primary-foreground: oklch(0.985 0 0);
-	--secondary: oklch(0.97 0 0);
-	--secondary-foreground: oklch(0.205 0 0);
-	--muted: oklch(0.97 0 0);
-	--muted-foreground: oklch(0.556 0 0);
-	--accent: oklch(0.97 0 0);
-	--accent-foreground: oklch(0.205 0 0);
+	--card: #fafaf9;
+	--card-foreground: #1c1917;
+	--popover: #fafaf9;
+	--popover-foreground: #1c1917;
+	--primary: #292524;
+	--primary-foreground: #fafaf9;
+	--secondary: #f5f5f4;
+	--secondary-foreground: #292524;
+	--muted: #f5f5f4;
+	--muted-foreground: #78716c;
+	--accent: #f5f5f4;
+	--accent-foreground: #292524;
 	--destructive: oklch(0.577 0.245 27.325);
-	--border: oklch(0.922 0 0);
-	--input: oklch(0.922 0 0);
-	--ring: oklch(0.708 0 0);
-	--chart-1: oklch(0.646 0.222 41.116);
-	--chart-2: oklch(0.6 0.118 184.704);
-	--chart-3: oklch(0.398 0.07 227.392);
-	--chart-4: oklch(0.828 0.189 84.429);
-	--chart-5: oklch(0.769 0.188 70.08);
-	--sidebar: oklch(0.985 0 0);
-	--sidebar-foreground: oklch(0.145 0 0);
-	--sidebar-primary: oklch(0.205 0 0);
-	--sidebar-primary-foreground: oklch(0.985 0 0);
-	--sidebar-accent: oklch(0.97 0 0);
-	--sidebar-accent-foreground: oklch(0.205 0 0);
-	--sidebar-border: oklch(0.922 0 0);
-	--sidebar-ring: oklch(0.708 0 0);
+	--border: #e7e5e4;
+	--input: #e7e5e4;
+	--ring: #a8a29e;
+	--chart-1: #78716c;
+	--chart-2: #a8a29e;
+	--chart-3: #57534e;
+	--chart-4: #d6d3d1;
+	--chart-5: #44403c;
+	--sidebar: #f5f5f4;
+	--sidebar-foreground: #1c1917;
+	--sidebar-primary: #292524;
+	--sidebar-primary-foreground: #fafaf9;
+	--sidebar-accent: #f5f5f4;
+	--sidebar-accent-foreground: #292524;
+	--sidebar-border: #e7e5e4;
+	--sidebar-ring: #a8a29e;
 }
 
-/* class-based dark mode - 应用到 html.dark */
+/* class-based dark mode */
 html.dark,
 :root.dark {
-	--background: #0a0a0a;
-	--foreground: #ededed;
+	--background: #0c0a09;
+	--foreground: #e7e5e4;
 }
-
-/* 同时支持系统偏好 */
-/* @media (prefers-color-scheme: dark) {
-	html:not(.light),
-	:root:not(.light) {
-		--background: #0a0a0a;
-		--foreground: #ededed;
-	}
-} */
 
 /* 添加 Tailwind 自定义颜色 */
 @theme {
@@ -85,7 +75,7 @@ body {
 		'Segoe UI Emoji';
 }
 
-/* 文档正文排版优化 */
+/* Prose typography */
 .prose {
 	letter-spacing: 0.01em;
 	font-weight: 380;
@@ -95,7 +85,6 @@ body {
 	line-height: 1.6;
 }
 
-/* 标题使用中等字重（相对细体更重，但比默认 bold 更轻） */
 .prose h1,
 .prose h2,
 .prose h3,
@@ -105,20 +94,18 @@ body {
 	font-weight: 480;
 }
 
-/* strong/b 也用中等字重 */
 .prose strong,
 .prose b {
 	font-weight: 480;
 }
 
-/* 确保文档页面标题在暗色模式下可见 - 只针对 prose 内的标题 */
 .prose h1,
 .prose h2,
 .prose h3,
 .prose h4,
 .prose h5,
 .prose h6 {
-	color: rgba(23, 23, 23, 0.85);
+	color: rgba(28, 25, 23, 0.85);
 }
 
 .dark .prose h1,
@@ -133,31 +120,25 @@ body {
 table,
 th,
 td {
-	color: #171717;
+	color: #1c1917;
 }
 
 .dark table,
 .dark th,
 .dark td {
-	color: #ededed;
+	color: #e7e5e4;
 }
 
-/* 文档页深色模式优化 */
+/* Dark mode prose */
 .dark .prose {
 	color: rgba(255, 255, 255, 0.7);
 }
-
-/* @media (prefers-color-scheme: dark) {
-	:root:not(.light) .prose {
-		color: rgba(255, 255, 255, 0.7);
-	}
-} */
 
 .dark .dark\:prose-invert {
 	--tw-prose-body: rgba(255, 255, 255, 0.7);
 	--tw-prose-headings: rgba(255, 255, 255, 0.95);
 	--tw-prose-lead: rgba(255, 255, 255, 0.7);
-	--tw-prose-links: rgba(147, 197, 253, 0.9);
+	--tw-prose-links: rgba(214, 211, 209, 0.9);
 	--tw-prose-bold: rgba(255, 255, 255, 0.9);
 	--tw-prose-counters: rgba(255, 255, 255, 0.6);
 	--tw-prose-bullets: rgba(255, 255, 255, 0.5);
@@ -172,28 +153,7 @@ td {
 	--tw-prose-td-borders: rgba(255, 255, 255, 0.2);
 }
 
-/* @media (prefers-color-scheme: dark) {
-	:root:not(.light) .dark\:prose-invert {
-		--tw-prose-body: rgba(255, 255, 255, 0.7);
-		--tw-prose-headings: rgba(255, 255, 255, 0.95);
-		--tw-prose-lead: rgba(255, 255, 255, 0.7);
-		--tw-prose-links: rgba(147, 197, 253, 0.9);
-		--tw-prose-bold: rgba(255, 255, 255, 0.9);
-		--tw-prose-counters: rgba(255, 255, 255, 0.6);
-		--tw-prose-bullets: rgba(255, 255, 255, 0.5);
-		--tw-prose-hr: rgba(255, 255, 255, 0.2);
-		--tw-prose-quotes: rgba(255, 255, 255, 0.8);
-		--tw-prose-quote-borders: rgba(255, 255, 255, 0.3);
-		--tw-prose-captions: rgba(255, 255, 255, 0.6);
-		--tw-prose-code: rgba(255, 255, 255, 0.9);
-		--tw-prose-pre-code: rgba(255, 255, 255, 0.95);
-		--tw-prose-pre-bg: rgba(0, 0, 0, 0.5);
-		--tw-prose-th-borders: rgba(255, 255, 255, 0.3);
-		--tw-prose-td-borders: rgba(255, 255, 255, 0.2);
-	}
-} */
-
-/* 标题更清晰 */
+/* Dark mode headings */
 .dark .prose h1,
 .dark .prose h2,
 .dark .prose h3,
@@ -201,71 +161,31 @@ td {
 	color: rgba(255, 255, 255, 0.95);
 }
 
-/* @media (prefers-color-scheme: dark) {
-	:root:not(.light) .prose h1,
-	:root:not(.light) .prose h2,
-	:root:not(.light) .prose h3,
-	:root:not(.light) .prose h4 {
-		color: rgba(255, 255, 255, 0.95);
-	}
-} */
-
-/* 链接更清晰 */
+/* Dark mode links - warm neutral instead of blue */
 .dark .prose a {
-	color: rgba(147, 197, 253, 0.9);
+	color: rgba(214, 211, 209, 0.9);
 }
 
-/* @media (prefers-color-scheme: dark) {
-	:root:not(.light) .prose a {
-		color: rgba(147, 197, 253, 0.9);
-	}
-} */
-
-/* 代码块背景更黑 */
+/* Dark mode code blocks */
 .dark .prose pre {
 	background-color: rgba(0, 0, 0, 0.6);
 }
 
-/* @media (prefers-color-scheme: dark) {
-	:root:not(.light) .prose pre {
-		background-color: rgba(0, 0, 0, 0.6);
-	}
-} */
-
-/* 表格样式 */
+/* Dark mode tables */
 .dark .prose table {
 	color: rgba(255, 255, 255, 0.7);
 }
-
-/* @media (prefers-color-scheme: dark) {
-	:root:not(.light) .prose table {
-		color: rgba(255, 255, 255, 0.7);
-	}
-} */
 
 .dark .prose thead {
 	color: rgba(255, 255, 255, 0.9);
 	border-bottom-color: rgba(255, 255, 255, 0.3);
 }
 
-/* @media (prefers-color-scheme: dark) {
-	:root:not(.light) .prose thead {
-		color: rgba(255, 255, 255, 0.9);
-		border-bottom-color: rgba(255, 255, 255, 0.3);
-	}
-} */
-
 .dark .prose tbody tr {
 	border-bottom-color: rgba(255, 255, 255, 0.2);
 }
 
-/* @media (prefers-color-scheme: dark) {
-	:root:not(.light) .prose tbody tr {
-		border-bottom-color: rgba(255, 255, 255, 0.2);
-	}
-} */
-
-/* 隐藏滚动条，但保持滚动功能 */
+/* Hide scrollbar but keep scroll functionality */
 .scrollbar-hide {
 	-ms-overflow-style: none; /* IE and Edge */
 	scrollbar-width: none; /* Firefox */
@@ -400,37 +320,37 @@ td {
 
 /* shadcn dark mode */
 .dark {
-	--background: oklch(0.145 0 0);
-	--foreground: oklch(0.985 0 0);
-	--card: oklch(0.205 0 0);
-	--card-foreground: oklch(0.985 0 0);
-	--popover: oklch(0.205 0 0);
-	--popover-foreground: oklch(0.985 0 0);
-	--primary: oklch(0.922 0 0);
-	--primary-foreground: oklch(0.205 0 0);
-	--secondary: oklch(0.269 0 0);
-	--secondary-foreground: oklch(0.985 0 0);
-	--muted: oklch(0.269 0 0);
-	--muted-foreground: oklch(0.708 0 0);
-	--accent: oklch(0.269 0 0);
-	--accent-foreground: oklch(0.985 0 0);
+	--background: #0c0a09;
+	--foreground: #fafaf9;
+	--card: #1c1917;
+	--card-foreground: #fafaf9;
+	--popover: #1c1917;
+	--popover-foreground: #fafaf9;
+	--primary: #e7e5e4;
+	--primary-foreground: #1c1917;
+	--secondary: #292524;
+	--secondary-foreground: #fafaf9;
+	--muted: #292524;
+	--muted-foreground: #a8a29e;
+	--accent: #292524;
+	--accent-foreground: #fafaf9;
 	--destructive: oklch(0.704 0.191 22.216);
-	--border: oklch(1 0 0 / 10%);
-	--input: oklch(1 0 0 / 15%);
-	--ring: oklch(0.556 0 0);
-	--chart-1: oklch(0.488 0.243 264.376);
-	--chart-2: oklch(0.696 0.17 162.48);
-	--chart-3: oklch(0.769 0.188 70.08);
-	--chart-4: oklch(0.627 0.265 303.9);
-	--chart-5: oklch(0.645 0.246 16.439);
-	--sidebar: oklch(0.205 0 0);
-	--sidebar-foreground: oklch(0.985 0 0);
-	--sidebar-primary: oklch(0.488 0.243 264.376);
-	--sidebar-primary-foreground: oklch(0.985 0 0);
-	--sidebar-accent: oklch(0.269 0 0);
-	--sidebar-accent-foreground: oklch(0.985 0 0);
-	--sidebar-border: oklch(1 0 0 / 10%);
-	--sidebar-ring: oklch(0.556 0 0);
+	--border: rgba(255, 255, 255, 0.1);
+	--input: rgba(255, 255, 255, 0.15);
+	--ring: #78716c;
+	--chart-1: #a8a29e;
+	--chart-2: #78716c;
+	--chart-3: #d6d3d1;
+	--chart-4: #57534e;
+	--chart-5: #44403c;
+	--sidebar: #1c1917;
+	--sidebar-foreground: #fafaf9;
+	--sidebar-primary: #a8a29e;
+	--sidebar-primary-foreground: #fafaf9;
+	--sidebar-accent: #292524;
+	--sidebar-accent-foreground: #fafaf9;
+	--sidebar-border: rgba(255, 255, 255, 0.1);
+	--sidebar-ring: #78716c;
 }
 
 /* shadcn base */

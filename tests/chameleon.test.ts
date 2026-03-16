@@ -14,7 +14,7 @@ import {
 	ChameleonEngine,
 	detectFingerprintingActivity,
 	getTimingJitter,
-} from '../packages/core/src/chameleon'
+} from '../packages/core-ext/src/chameleon'
 
 describe('ChameleonEngine', () => {
 	let chameleon: ChameleonEngine
@@ -462,12 +462,13 @@ describe('API Access Normalization', () => {
 })
 
 describe('Integration with PageAgent', () => {
-	it('should be importable from core exports', async () => {
-		// Verify the exports are properly set up
-		const core = await import('../packages/core/src/PageAgentCore')
-		expect(core.ChameleonEngine).toBeDefined()
-		expect(core.PeekabooController).toBeDefined()
-		expect(core.detectFingerprintingActivity).toBeDefined()
-		expect(core.getTimingJitter).toBeDefined()
+	it('should be importable from core-ext exports', async () => {
+		// Verify the exports are properly set up in core-ext
+		const coreExt = await import('../packages/core-ext/src/index')
+		expect(coreExt.ChameleonEngine).toBeDefined()
+		expect(coreExt.PeekabooController).toBeDefined()
+		expect(coreExt.detectFingerprintingActivity).toBeDefined()
+		expect(coreExt.getTimingJitter).toBeDefined()
+		expect(coreExt.StealthAgent).toBeDefined()
 	})
 })

@@ -13,7 +13,6 @@ import { ChameleonEngine } from './chameleon'
 import { PeekabooController } from './peekaboo'
 import PLANNING_PROMPT from './prompts/planning_prompt.md?raw'
 import SYSTEM_PROMPT from './prompts/system_prompt.md?raw'
-import { sanitizePageContent } from './sanitize'
 import { tools } from './tools'
 import type {
 	AgentActivity,
@@ -30,11 +29,6 @@ import type {
 import { assert, fetchLlmsTxt, normalizeResponse, uid, waitFor } from './utils'
 
 export { tool, type PageAgentTool } from './tools'
-export { sanitizePageContent, sanitizeHTML } from './sanitize'
-export { ChameleonEngine, detectFingerprintingActivity, getTimingJitter } from './chameleon'
-export type { ChameleonConfig } from './chameleon'
-export { PeekabooController } from './peekaboo'
-export type { PeekabooConfig, PeekabooStatus } from './peekaboo'
 export type * from './types'
 
 export type PageAgentCoreConfig = AgentConfig & { pageController: IPageController }
@@ -179,11 +173,6 @@ export class PageAgentCore extends EventTarget {
 	 */
 	onAskUser?: (question: string) => Promise<string>
 
-	/** Chameleon anti-fingerprinting engine */
-	readonly chameleon: ChameleonEngine | null
-	/** Peekaboo self-removal controller */
-	readonly peekaboo: PeekabooController | null
-
 	#status: AgentStatus = 'idle'
 	#llm: LLM
 	#abortController = new AbortController()
@@ -253,32 +242,6 @@ export class PageAgentCore extends EventTarget {
 
 		if (!this.config.experimentalScriptExecutionTool) {
 			this.tools.delete('execute_javascript')
-		}
-
-		// Initialize Chameleon (anti-fingerprinting)
-		const peekabooEnabled = this.config.peekaboo?.enabled
-		if (this.config.chameleon || peekabooEnabled) {
-			this.chameleon = new ChameleonEngine(this.config.chameleon)
-			this.chameleon.activate()
-		} else {
-			this.chameleon = null
-		}
-
-		// Initialize Peekaboo (self-removal)
-		if (peekabooEnabled) {
-			this.peekaboo = new PeekabooController(this.config.peekaboo)
-			if (this.chameleon) {
-				this.peekaboo.start(this.chameleon)
-			}
-
-			// If peekaboo withdraws, stop the agent gracefully
-			this.peekaboo.addEventListener('withdraw', () => {
-				if (this.#status === 'running') {
-					this.stop()
-				}
-			})
-		} else {
-			this.peekaboo = null
 		}
 	}
 
@@ -843,7 +806,7 @@ export class PageAgentCore extends EventTarget {
 
 		// <browser_state>
 
-		let pageContent = sanitizePageContent(browserState.content)
+		let pageContent = browserState.content
 		if (this.config.transformPageContent) {
 			pageContent = await this.config.transformPageContent(pageContent)
 		}
@@ -948,10 +911,6 @@ export class PageAgentCore extends EventTarget {
 		this.pageController.dispose()
 		// this.history = []
 		this.#abortController.abort()
-
-		// Clean up chameleon and peekaboo
-		this.peekaboo?.dispose()
-		this.chameleon?.deactivate()
 
 		// Emit dispose event for UI cleanup
 		this.dispatchEvent(new Event('dispose'))
