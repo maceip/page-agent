@@ -1134,6 +1134,13 @@ var PageController = (() => {
 							isParentHighlighted
 						)
 						nodeData.ref = node
+						if (nodeData.isInteractive && Object.keys(nodeData.attributes).length === 0) {
+							const attributeNames = node.getAttributeNames?.() || []
+							for (const name of attributeNames) {
+								const value = node.getAttribute(name)
+								nodeData.attributes[name] = value
+							}
+						}
 					}
 				}
 			}
@@ -1749,10 +1756,10 @@ var PageController = (() => {
 	}
 	async function scrollIntoViewIfNeeded(element) {
 		const el = element
-		if (el.scrollIntoViewIfNeeded) {
+		if (typeof el.scrollIntoViewIfNeeded === 'function') {
 			el.scrollIntoViewIfNeeded()
 		} else {
-			el.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' })
+			element.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' })
 		}
 	}
 	return __toCommonJS(page_controller_entry_exports)

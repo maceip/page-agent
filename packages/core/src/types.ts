@@ -197,6 +197,12 @@ export interface AgentConfig extends LLMConfig {
 	 * @default true
 	 */
 	enablePlanning?: boolean
+
+	/**
+	 * Delay between steps in seconds.
+	 * @default 0.4
+	 */
+	stepDelay?: number
 }
 
 /**
