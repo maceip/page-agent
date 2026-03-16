@@ -1613,7 +1613,7 @@ var PageController = (() => {
 		const x = rect.left + rect.width / 2
 		const y = rect.top + rect.height / 2
 		window.dispatchEvent(new CustomEvent('PageAgent::MovePointerTo', { detail: { x, y } }))
-		await waitFor(0.3)
+		await waitFor(0.1)
 	}
 	function getElementByIndex(selectorMap, index) {
 		const interactiveNode = selectorMap.get(index)
@@ -1643,16 +1643,15 @@ var PageController = (() => {
 		blurLastClickedElement()
 		lastClickedElement = element
 		await scrollIntoViewIfNeeded(element)
-		await movePointerToElement(element)
+		movePointerToElement(element)
 		window.dispatchEvent(new CustomEvent('PageAgent::ClickPointer'))
-		await waitFor(0.1)
 		element.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true }))
 		element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true }))
 		element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
 		element.focus()
 		element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
 		element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
-		await waitFor(0.2)
+		await waitFor(0.08)
 	}
 	var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
 		window.HTMLInputElement.prototype,
@@ -1719,7 +1718,7 @@ var PageController = (() => {
 		if (!isContentEditable) {
 			element.dispatchEvent(new Event('input', { bubbles: true }))
 		}
-		await waitFor(0.1)
+		await waitFor(0.05)
 		blurLastClickedElement()
 	}
 	async function selectOptionElement(selectElement, optionText) {
@@ -1733,7 +1732,7 @@ var PageController = (() => {
 		}
 		selectElement.value = option.value
 		selectElement.dispatchEvent(new Event('change', { bubbles: true }))
-		await waitFor(0.1)
+		await waitFor(0.05)
 	}
 	async function pressKeyAction(key, modifiers) {
 		const mods = {
@@ -1832,7 +1831,7 @@ var PageController = (() => {
 		if (typeof el.scrollIntoViewIfNeeded === 'function') {
 			el.scrollIntoViewIfNeeded()
 		} else {
-			element.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' })
+			el.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' })
 		}
 	}
 	async function scrollVertically(down, scroll_amount, element) {
@@ -1905,34 +1904,32 @@ var PageController = (() => {
 			const scrolled = scrollAfter - scrollBefore
 			if (Math.abs(scrolled) < 1) {
 				return dy > 0
-					? `\u26A0\uFE0F Already at the bottom of the page, cannot scroll down further.`
-					: `\u26A0\uFE0F Already at the top of the page, cannot scroll up further.`
+					? `Already at the bottom of the page, cannot scroll down further.`
+					: `Already at the top of the page, cannot scroll up further.`
 			}
 			const reachedBottom = dy > 0 && scrollAfter >= scrollMax - 1
 			const reachedTop = dy < 0 && scrollAfter <= 1
-			if (reachedBottom)
-				return `\u2705 Scrolled page by ${scrolled}px. Reached the bottom of the page.`
-			if (reachedTop) return `\u2705 Scrolled page by ${scrolled}px. Reached the top of the page.`
-			return `\u2705 Scrolled page by ${scrolled}px.`
+			if (reachedBottom) return `Scrolled page by ${scrolled}px. Reached the bottom of the page.`
+			if (reachedTop) return `Scrolled page by ${scrolled}px. Reached the top of the page.`
+			return `Scrolled page by ${scrolled}px.`
 		} else {
 			const scrollBefore = el.scrollTop
 			const scrollMax = el.scrollHeight - el.clientHeight
 			el.scrollBy({ top: dy, behavior: 'smooth' })
-			await waitFor(0.1)
+			await waitFor(0.05)
 			const scrollAfter = el.scrollTop
 			const scrolled = scrollAfter - scrollBefore
 			if (Math.abs(scrolled) < 1) {
 				return dy > 0
-					? `\u26A0\uFE0F Already at the bottom of container (${el.tagName}), cannot scroll down further.`
-					: `\u26A0\uFE0F Already at the top of container (${el.tagName}), cannot scroll up further.`
+					? `Already at the bottom of container (${el.tagName}), cannot scroll down further.`
+					: `Already at the top of container (${el.tagName}), cannot scroll up further.`
 			}
 			const reachedBottom = dy > 0 && scrollAfter >= scrollMax - 1
 			const reachedTop = dy < 0 && scrollAfter <= 1
 			if (reachedBottom)
-				return `\u2705 Scrolled container (${el.tagName}) by ${scrolled}px. Reached the bottom.`
-			if (reachedTop)
-				return `\u2705 Scrolled container (${el.tagName}) by ${scrolled}px. Reached the top.`
-			return `\u2705 Scrolled container (${el.tagName}) by ${scrolled}px.`
+				return `Scrolled container (${el.tagName}) by ${scrolled}px. Reached the bottom.`
+			if (reachedTop) return `Scrolled container (${el.tagName}) by ${scrolled}px. Reached the top.`
+			return `Scrolled container (${el.tagName}) by ${scrolled}px.`
 		}
 	}
 	async function scrollHorizontally(right, scroll_amount, element) {
@@ -2005,35 +2002,33 @@ var PageController = (() => {
 			const scrolled = scrollAfter - scrollBefore
 			if (Math.abs(scrolled) < 1) {
 				return dx > 0
-					? `\u26A0\uFE0F Already at the right edge of the page, cannot scroll right further.`
-					: `\u26A0\uFE0F Already at the left edge of the page, cannot scroll left further.`
+					? `Already at the right edge of the page, cannot scroll right further.`
+					: `Already at the left edge of the page, cannot scroll left further.`
 			}
 			const reachedRight = dx > 0 && scrollAfter >= scrollMax - 1
 			const reachedLeft = dx < 0 && scrollAfter <= 1
-			if (reachedRight)
-				return `\u2705 Scrolled page by ${scrolled}px. Reached the right edge of the page.`
-			if (reachedLeft)
-				return `\u2705 Scrolled page by ${scrolled}px. Reached the left edge of the page.`
-			return `\u2705 Scrolled page horizontally by ${scrolled}px.`
+			if (reachedRight) return `Scrolled page by ${scrolled}px. Reached the right edge of the page.`
+			if (reachedLeft) return `Scrolled page by ${scrolled}px. Reached the left edge of the page.`
+			return `Scrolled page horizontally by ${scrolled}px.`
 		} else {
 			const scrollBefore = el.scrollLeft
 			const scrollMax = el.scrollWidth - el.clientWidth
 			el.scrollBy({ left: dx, behavior: 'smooth' })
-			await waitFor(0.1)
+			await waitFor(0.05)
 			const scrollAfter = el.scrollLeft
 			const scrolled = scrollAfter - scrollBefore
 			if (Math.abs(scrolled) < 1) {
 				return dx > 0
-					? `\u26A0\uFE0F Already at the right edge of container (${el.tagName}), cannot scroll right further.`
-					: `\u26A0\uFE0F Already at the left edge of container (${el.tagName}), cannot scroll left further.`
+					? `Already at the right edge of container (${el.tagName}), cannot scroll right further.`
+					: `Already at the left edge of container (${el.tagName}), cannot scroll left further.`
 			}
 			const reachedRight = dx > 0 && scrollAfter >= scrollMax - 1
 			const reachedLeft = dx < 0 && scrollAfter <= 1
 			if (reachedRight)
-				return `\u2705 Scrolled container (${el.tagName}) by ${scrolled}px. Reached the right edge.`
+				return `Scrolled container (${el.tagName}) by ${scrolled}px. Reached the right edge.`
 			if (reachedLeft)
-				return `\u2705 Scrolled container (${el.tagName}) by ${scrolled}px. Reached the left edge.`
-			return `\u2705 Scrolled container (${el.tagName}) horizontally by ${scrolled}px.`
+				return `Scrolled container (${el.tagName}) by ${scrolled}px. Reached the left edge.`
+			return `Scrolled container (${el.tagName}) horizontally by ${scrolled}px.`
 		}
 	}
 	return __toCommonJS(page_controller_entry_exports)
